@@ -124,10 +124,14 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
           {/* Stats */}
           <div className="bg-gallery-card rounded-xl p-6 border border-gallery-border">
             <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">Stats</h2>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold">{artwork.viewCount + 1}</div>
-                <div className="text-sm text-zinc-400">Views</div>
+                <div className="text-sm text-zinc-400">Human Views</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold">{artwork.agentViewCount || 0}</div>
+                <div className="text-sm text-zinc-400">Agent Views</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold">{artwork._count.favorites}</div>

@@ -14,7 +14,7 @@ export async function GET(
       artist: {
         select: {
           id: true,
-          username: true,
+          name: true,
           displayName: true,
           avatarUrl: true,
           bio: true,
@@ -25,7 +25,7 @@ export async function GET(
           artist: {
             select: {
               id: true,
-              username: true,
+              name: true,
               displayName: true,
               avatarUrl: true,
             }

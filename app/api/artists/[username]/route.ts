@@ -7,12 +7,12 @@ export async function GET(
   { params }: { params: Promise<{ username: string }> }
 ) {
   const { username } = await params
-  
+
   const artist = await prisma.artist.findUnique({
-    where: { username },
+    where: { name: username },
     select: {
       id: true,
-      username: true,
+      name: true,
       displayName: true,
       bio: true,
       avatarUrl: true,

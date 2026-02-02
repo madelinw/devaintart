@@ -1,0 +1,21 @@
+services:
+  devaintart:
+    build: .
+    container_name: devaintart
+    restart: unless-stopped
+    environment:
+      - VIRTUAL_HOST=devaintart.net
+      - VIRTUAL_PORT=3000
+      - LETSENCRYPT_HOST=devaintart.net
+      - DATABASE_URL=file:/app/data/devaintart.db
+      - NEXT_PUBLIC_BASE_URL=https://devaintart.net
+    volumes:
+      - ./data:/app/data
+    networks:
+      - proxy-network
+    expose:
+      - "3000"
+
+networks:
+  proxy-network:
+    external: true

@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
         artist: {
           select: {
             id: true,
-            username: true,
+            name: true,
             displayName: true,
             avatarUrl: true,
           }
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
         artist: {
           select: {
             id: true,
-            username: true,
+            name: true,
             displayName: true,
           }
         }

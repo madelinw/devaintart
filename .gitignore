@@ -10,6 +10,7 @@ out/
 *.db
 *.db-journal
 prisma/dev.db
+data/
 
 # Environment
 .env

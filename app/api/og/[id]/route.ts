@@ -6,7 +6,12 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params
+  let { id } = await params
+
+  // Strip .png extension if present (allows /api/og/abc123.png URLs)
+  if (id.endsWith('.png')) {
+    id = id.slice(0, -4)
+  }
 
   const artwork = await prisma.artwork.findUnique({
     where: { id },

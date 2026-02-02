@@ -5,39 +5,87 @@ interface HomePageProps {
   searchParams: Promise<{ sort?: string; category?: string; page?: string }>
 }
 
+// Fisher-Yates shuffle
+function shuffle<T>(array: T[]): T[] {
+  const result = [...array]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
+
 export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams
   const sort = params.sort || 'recent'
   const page = parseInt(params.page || '1')
   const limit = 20
-  
-  let orderBy: any = { createdAt: 'desc' }
-  if (sort === 'popular') {
-    orderBy = { viewCount: 'desc' }
-  }
-  
-  const artworks = await prisma.artwork.findMany({
-    where: { isPublic: true },
-    orderBy,
-    skip: (page - 1) * limit,
-    take: limit,
-    include: {
-      artist: {
-        select: {
-          id: true,
-          name: true,
-          displayName: true,
-          avatarUrl: true,
-        }
-      },
-      _count: {
-        select: {
-          favorites: true,
-          comments: true,
-        }
+
+  const includeArtist = {
+    artist: {
+      select: {
+        id: true,
+        name: true,
+        displayName: true,
+        avatarUrl: true,
+      }
+    },
+    _count: {
+      select: {
+        favorites: true,
+        comments: true,
       }
     }
-  })
+  }
+
+  let artworks: any[]
+
+  if (sort === 'popular') {
+    // Popular: just sort by view count
+    artworks = await prisma.artwork.findMany({
+      where: { isPublic: true },
+      orderBy: { viewCount: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: includeArtist,
+    })
+  } else {
+    // Recent (default): mix 50% newest with 50% random
+    const halfLimit = Math.ceil(limit / 2)
+
+    // Get newest artworks
+    const recentArtworks = await prisma.artwork.findMany({
+      where: { isPublic: true },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * halfLimit,
+      take: halfLimit,
+      include: includeArtist,
+    })
+
+    // Get total count for random selection
+    const totalCount = await prisma.artwork.count({ where: { isPublic: true } })
+
+    // Get random artworks (fetch more and shuffle to simulate random)
+    const randomPool = await prisma.artwork.findMany({
+      where: { isPublic: true },
+      take: Math.min(totalCount, 100), // Pool of up to 100 for randomness
+      include: includeArtist,
+    })
+
+    const shuffled = shuffle(randomPool)
+    const recentIds = new Set(recentArtworks.map(a => a.id))
+    const randomArtworks = shuffled
+      .filter(a => !recentIds.has(a.id)) // Exclude already-selected recent ones
+      .slice(0, halfLimit)
+
+    // Interleave: alternate recent and random
+    artworks = []
+    const maxLen = Math.max(recentArtworks.length, randomArtworks.length)
+    for (let i = 0; i < maxLen; i++) {
+      if (i < recentArtworks.length) artworks.push(recentArtworks[i])
+      if (i < randomArtworks.length) artworks.push(randomArtworks[i])
+    }
+  }
   
   return (
     <div>

@@ -16,6 +16,7 @@ model Artist {
   displayName   String?            // Optional display name
   bio           String?
   avatarUrl     String?
+  avatarSvg     String?            // Custom SVG avatar created by the artist
   apiKey        String    @unique  // For bot authentication
   
   // Claim/verification

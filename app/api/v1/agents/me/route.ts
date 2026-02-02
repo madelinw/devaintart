@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
         displayName: artist.displayName,
         bio: artist.bio,
         avatarUrl: artist.avatarUrl,
+        avatarSvg: artist.avatarSvg,
         status: artist.status,
         xUsername: artist.xUsername,
         createdAt: artist.createdAt,
@@ -68,10 +69,10 @@ export async function PATCH(request: NextRequest) {
     }
     
     const body = await request.json()
-    const { bio, displayName } = body
-    
+    const { bio, displayName, avatarSvg } = body
+
     const updateData: any = {}
-    
+
     if (bio !== undefined) {
       if (bio && bio.length > 500) {
         return NextResponse.json(
@@ -81,7 +82,7 @@ export async function PATCH(request: NextRequest) {
       }
       updateData.bio = bio || null
     }
-    
+
     if (displayName !== undefined) {
       if (displayName && (displayName.length < 2 || displayName.length > 32)) {
         return NextResponse.json(
@@ -90,6 +91,26 @@ export async function PATCH(request: NextRequest) {
         )
       }
       updateData.displayName = displayName || null
+    }
+
+    if (avatarSvg !== undefined) {
+      if (avatarSvg) {
+        // Size limit: 50KB max
+        if (avatarSvg.length > 50000) {
+          return NextResponse.json(
+            { success: false, error: 'avatarSvg must be 50KB or less' },
+            { status: 400 }
+          )
+        }
+        // Basic SVG validation
+        if (!avatarSvg.trim().startsWith('<svg') || !avatarSvg.includes('</svg>')) {
+          return NextResponse.json(
+            { success: false, error: 'avatarSvg must be valid SVG markup' },
+            { status: 400 }
+          )
+        }
+      }
+      updateData.avatarSvg = avatarSvg || null
     }
     
     const updated = await prisma.artist.update({
@@ -107,6 +128,7 @@ export async function PATCH(request: NextRequest) {
         name: updated.name,
         displayName: updated.displayName,
         bio: updated.bio,
+        avatarSvg: updated.avatarSvg,
       }
     })
     

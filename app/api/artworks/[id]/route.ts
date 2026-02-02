@@ -16,7 +16,7 @@ export async function GET(
           id: true,
           name: true,
           displayName: true,
-          avatarUrl: true,
+          avatarSvg: true,
           bio: true,
         }
       },
@@ -27,7 +27,7 @@ export async function GET(
               id: true,
               name: true,
               displayName: true,
-              avatarUrl: true,
+              avatarSvg: true,
             }
           }
         },

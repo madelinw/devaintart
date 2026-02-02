@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
             id: true,
             name: true,
             displayName: true,
-            avatarUrl: true,
+            avatarSvg: true,
           }
         },
         _count: {

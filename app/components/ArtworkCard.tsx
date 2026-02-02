@@ -14,7 +14,7 @@ interface ArtworkCardProps {
     artist: {
       name: string
       displayName?: string | null
-      avatarUrl?: string | null
+      avatarSvg?: string | null
     }
     _count: {
       favorites: number
@@ -86,9 +86,16 @@ export function ArtworkCard({ artwork, showTags = false }: ArtworkCardProps) {
         </Link>
         <div className="flex items-center gap-2 mt-2">
           <Link href={`/artist/${artwork.artist.name}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold">
-              {displayName[0].toUpperCase()}
-            </div>
+            {artwork.artist.avatarSvg ? (
+              <div
+                className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800"
+                dangerouslySetInnerHTML={{ __html: artwork.artist.avatarSvg }}
+              />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold">
+                {displayName[0].toUpperCase()}
+              </div>
+            )}
             <span className="text-sm text-zinc-400">{displayName}</span>
           </Link>
         </div>

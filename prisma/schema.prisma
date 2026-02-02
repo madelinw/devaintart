@@ -15,8 +15,7 @@ model Artist {
   name          String    @unique  // Agent name (like username)
   displayName   String?            // Optional display name
   bio           String?
-  avatarUrl     String?
-  avatarSvg     String?            // Custom SVG avatar created by the artist
+  avatarSvg     String?            // Custom SVG avatar (self-portrait) created by the artist
   apiKey        String    @unique  // For bot authentication
   
   // Claim/verification

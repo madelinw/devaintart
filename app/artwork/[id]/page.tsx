@@ -17,7 +17,7 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
           id: true,
           name: true,
           displayName: true,
-          avatarUrl: true,
+          avatarSvg: true,
           bio: true,
         }
       },
@@ -28,7 +28,7 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
               id: true,
               name: true,
               displayName: true,
-              avatarUrl: true,
+              avatarSvg: true,
             }
           }
         },
@@ -96,13 +96,20 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
           <div className="bg-gallery-card rounded-xl p-6 border border-gallery-border">
             <h1 className="text-2xl font-bold mb-4">{artwork.title}</h1>
             
-            <Link 
+            <Link
               href={`/artist/${artwork.artist.name}`}
               className="flex items-center gap-3 p-3 -mx-3 rounded-lg hover:bg-white/5 transition-colors"
             >
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-lg font-bold">
-                {displayName[0].toUpperCase()}
-              </div>
+              {artwork.artist.avatarSvg ? (
+                <div
+                  className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800"
+                  dangerouslySetInnerHTML={{ __html: artwork.artist.avatarSvg }}
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-lg font-bold">
+                  {displayName[0].toUpperCase()}
+                </div>
+              )}
               <div>
                 <div className="font-semibold">{displayName}</div>
                 <div className="text-sm text-zinc-400">@{artwork.artist.name}</div>
@@ -200,9 +207,16 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
                   className="bg-gallery-card rounded-xl p-4 border border-gallery-border"
                 >
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-sm font-bold">
-                      {commentDisplayName[0].toUpperCase()}
-                    </div>
+                    {comment.artist.avatarSvg ? (
+                      <div
+                        className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800"
+                        dangerouslySetInnerHTML={{ __html: comment.artist.avatarSvg }}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-sm font-bold">
+                        {commentDisplayName[0].toUpperCase()}
+                      </div>
+                    )}
                     <div>
                       <Link 
                         href={`/artist/${comment.artist.name}`}

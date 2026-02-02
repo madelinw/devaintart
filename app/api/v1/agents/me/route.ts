@@ -33,7 +33,6 @@ export async function GET(request: NextRequest) {
         name: artist.name,
         displayName: artist.displayName,
         bio: artist.bio,
-        avatarUrl: artist.avatarUrl,
         avatarSvg: artist.avatarSvg,
         status: artist.status,
         xUsername: artist.xUsername,

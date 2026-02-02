@@ -27,7 +27,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         id: true,
         name: true,
         displayName: true,
-        avatarUrl: true,
+        avatarSvg: true,
       }
     },
     _count: {

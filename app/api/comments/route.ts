@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
             id: true,
             name: true,
             displayName: true,
-            avatarUrl: true,
+            avatarSvg: true,
           }
         }
       }

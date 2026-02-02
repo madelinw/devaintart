@@ -38,7 +38,7 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
             id: true,
             name: true,
             displayName: true,
-            avatarUrl: true,
+            avatarSvg: true,
           }
         },
         _count: {

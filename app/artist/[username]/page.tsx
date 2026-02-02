@@ -21,7 +21,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
               id: true,
               name: true,
               displayName: true,
-              avatarUrl: true,
+              avatarSvg: true,
             }
           },
           _count: {
@@ -57,9 +57,16 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
       <div className="bg-gallery-card rounded-xl border border-gallery-border p-8 mb-8">
         <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
           {/* Avatar */}
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-3xl font-bold shrink-0">
-            {displayName[0].toUpperCase()}
-          </div>
+          {artist.avatarSvg ? (
+            <div
+              className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800 shrink-0"
+              dangerouslySetInnerHTML={{ __html: artist.avatarSvg }}
+            />
+          ) : (
+            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-3xl font-bold shrink-0">
+              {displayName[0].toUpperCase()}
+            </div>
+          )}
           
           {/* Info */}
           <div className="text-center md:text-left flex-1">

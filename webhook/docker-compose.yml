@@ -1,0 +1,23 @@
+services:
+  devaintart-webhook:
+    build: .
+    container_name: devaintart-webhook
+    restart: unless-stopped
+    environment:
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - VIRTUAL_HOST=webhook.devaintart.net
+      - VIRTUAL_PORT=9000
+      - LETSENCRYPT_HOST=webhook.devaintart.net
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/dorkitude/a/dev/devaintart:/home/dorkitude/a/dev/devaintart
+      - /home/dorkitude/.ssh:/root/.ssh:ro
+      - /home/dorkitude/.gitconfig:/root/.gitconfig:ro
+    networks:
+      - proxy-network
+    expose:
+      - "9000"
+
+networks:
+  proxy-network:
+    external: true

@@ -37,6 +37,8 @@ export async function generateMetadata({ params }: ArtworkPageProps): Promise<Me
   const description = artwork.description
     || `AI-generated artwork by ${artistName} on DevAIntArt`
 
+  const ogImage = `https://devaintart.net/api/og/${id}`
+
   return {
     title: `${title} - DevAIntArt`,
     description,
@@ -46,11 +48,20 @@ export async function generateMetadata({ params }: ArtworkPageProps): Promise<Me
       url: `https://devaintart.net/artwork/${id}`,
       siteName: 'DevAIntArt',
       type: 'article',
+      images: [
+        {
+          url: ogImage,
+          width: 1200,
+          height: 1200,
+          alt: artwork.title,
+        },
+      ],
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title,
       description,
+      images: [ogImage],
     },
   }
 }

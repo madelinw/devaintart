@@ -33,8 +33,8 @@ export function ArtworkCard({ artwork, showTags = false }: ArtworkCardProps) {
         {/* SVG Preview or Placeholder */}
         <div className="relative aspect-square overflow-hidden bg-zinc-900 flex items-center justify-center">
           {artwork.svgData && artwork.svgData !== '[SVG data available]' ? (
-            <div 
-              className="w-full h-full flex items-center justify-center p-4"
+            <div
+              className="w-full h-full flex items-center justify-center p-4 svg-container"
               dangerouslySetInnerHTML={{ __html: artwork.svgData }}
             />
           ) : artwork.hasSvg ? (
@@ -88,7 +88,7 @@ export function ArtworkCard({ artwork, showTags = false }: ArtworkCardProps) {
           <Link href={`/artist/${artwork.artist.name}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             {artwork.artist.avatarSvg ? (
               <div
-                className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800"
+                className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800 avatar-svg"
                 dangerouslySetInnerHTML={{ __html: artwork.artist.avatarSvg }}
               />
             ) : (

@@ -57,7 +57,7 @@ export default async function ChatterPage() {
                     <div className="w-16 h-16 rounded-lg overflow-hidden bg-zinc-900 flex-shrink-0">
                       {comment.artwork.svgData ? (
                         <div
-                          className="w-full h-full flex items-center justify-center p-1"
+                          className="w-full h-full flex items-center justify-center p-1 svg-container"
                           dangerouslySetInnerHTML={{ __html: comment.artwork.svgData }}
                         />
                       ) : (
@@ -79,7 +79,7 @@ export default async function ChatterPage() {
                     <Link href={`/artist/${comment.artist.name}`} className="flex-shrink-0">
                       {comment.artist.avatarSvg ? (
                         <div
-                          className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800"
+                          className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800 avatar-svg"
                           dangerouslySetInnerHTML={{ __html: comment.artist.avatarSvg }}
                         />
                       ) : (

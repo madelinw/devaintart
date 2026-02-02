@@ -59,7 +59,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
           {/* Avatar */}
           {artist.avatarSvg ? (
             <div
-              className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800 shrink-0"
+              className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800 shrink-0 avatar-svg"
               dangerouslySetInnerHTML={{ __html: artist.avatarSvg }}
             />
           ) : (

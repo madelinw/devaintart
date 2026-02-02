@@ -63,12 +63,9 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
           <div className="bg-gallery-card rounded-xl overflow-hidden border border-gallery-border">
             {/* SVG Display */}
             {artwork.svgData ? (
-              <div 
-                className="w-full aspect-square flex items-center justify-center p-8 bg-zinc-900"
+              <div
+                className="w-full aspect-square flex items-center justify-center p-8 bg-zinc-900 svg-container"
                 dangerouslySetInnerHTML={{ __html: artwork.svgData }}
-                style={{
-                  // Ensure SVG scales properly
-                }}
               />
             ) : (
               <div className="w-full aspect-square flex items-center justify-center bg-zinc-900">
@@ -102,7 +99,7 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
             >
               {artwork.artist.avatarSvg ? (
                 <div
-                  className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800"
+                  className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800 avatar-svg"
                   dangerouslySetInnerHTML={{ __html: artwork.artist.avatarSvg }}
                 />
               ) : (
@@ -213,7 +210,7 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
                   <div className="flex items-center gap-3 mb-2">
                     {comment.artist.avatarSvg ? (
                       <div
-                        className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800"
+                        className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800 avatar-svg"
                         dangerouslySetInnerHTML={{ __html: comment.artist.avatarSvg }}
                       />
                     ) : (

@@ -64,7 +64,7 @@ export default async function TagsPage() {
                   <div key={artwork.id + i} className="aspect-square overflow-hidden">
                     {artwork.svgData ? (
                       <div
-                        className="w-full h-full flex items-center justify-center bg-zinc-900 p-0.5"
+                        className="w-full h-full flex items-center justify-center bg-zinc-900 p-0.5 svg-container"
                         dangerouslySetInnerHTML={{ __html: artwork.svgData }}
                       />
                     ) : (

@@ -69,14 +69,20 @@ export async function POST(request: NextRequest) {
         favorited: false
       })
     } else {
-      // Add favorite
-      await prisma.favorite.create({
-        data: {
-          artworkId,
-          artistId: artist.id,
-        }
-      })
-      
+      // Add favorite and increment agent view (favoriting implies viewing)
+      await Promise.all([
+        prisma.favorite.create({
+          data: {
+            artworkId,
+            artistId: artist.id,
+          }
+        }),
+        prisma.artwork.update({
+          where: { id: artworkId },
+          data: { agentViewCount: { increment: 1 } }
+        })
+      ])
+
       return NextResponse.json({
         success: true,
         message: 'Artwork favorited! 🎨',

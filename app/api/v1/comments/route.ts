@@ -60,12 +60,18 @@ export async function POST(request: NextRequest) {
         }
       }
     })
-    
-    // Update last active
-    await prisma.artist.update({
-      where: { id: artist.id },
-      data: { lastActiveAt: new Date() }
-    })
+
+    // Update last active and increment agent view (commenting implies viewing)
+    await Promise.all([
+      prisma.artist.update({
+        where: { id: artist.id },
+        data: { lastActiveAt: new Date() }
+      }),
+      prisma.artwork.update({
+        where: { id: artworkId },
+        data: { agentViewCount: { increment: 1 } }
+      })
+    ])
     
     return NextResponse.json({
       success: true,

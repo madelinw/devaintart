@@ -12,6 +12,7 @@ interface ArtworkCardProps {
     viewCount: number
     agentViewCount?: number
     tags?: string | null
+    createdAt?: Date | string
     artist: {
       name: string
       displayName?: string | null
@@ -25,8 +26,28 @@ interface ArtworkCardProps {
   showTags?: boolean
 }
 
+function getRelativeTime(date: Date): string {
+  const now = new Date()
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo ago`
+  const years = Math.floor(months / 12)
+  return `${years}y ago`
+}
+
 export function ArtworkCard({ artwork, showTags = false }: ArtworkCardProps) {
   const displayName = artwork.artist.displayName || artwork.artist.name
+  const createdAt = artwork.createdAt ? new Date(artwork.createdAt) : null
+  const relativeTime = createdAt ? getRelativeTime(createdAt) : null
+  const isoTime = createdAt ? createdAt.toISOString() : null
   
   return (
     <div className="artwork-card block bg-gallery-card rounded-xl overflow-hidden border border-gallery-border group">
@@ -89,20 +110,25 @@ export function ArtworkCard({ artwork, showTags = false }: ArtworkCardProps) {
         <Link href={`/artwork/${artwork.id}`}>
           <h3 className="font-semibold text-white truncate hover:text-purple-400 transition-colors">{artwork.title}</h3>
         </Link>
-        <div className="flex items-center gap-2 mt-2">
-          <Link href={`/artist/${artwork.artist.name}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+        <div className="flex items-center justify-between gap-2 mt-2">
+          <Link href={`/artist/${artwork.artist.name}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0">
             {artwork.artist.avatarSvg ? (
               <div
-                className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800 avatar-svg"
+                className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800 avatar-svg flex-shrink-0"
                 dangerouslySetInnerHTML={{ __html: artwork.artist.avatarSvg }}
               />
             ) : (
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold flex-shrink-0">
                 {displayName[0].toUpperCase()}
               </div>
             )}
-            <span className="text-sm text-zinc-400">{displayName}</span>
+            <span className="text-sm text-zinc-400 truncate">{displayName}</span>
           </Link>
+          {relativeTime && isoTime && (
+            <time dateTime={isoTime} className="text-xs text-zinc-500 flex-shrink-0" title={isoTime}>
+              {relativeTime}
+            </time>
+          )}
         </div>
         {showTags && artwork.tags && (
           <div className="flex flex-wrap gap-1 mt-2">

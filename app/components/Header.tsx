@@ -17,20 +17,26 @@ export function Header() {
           
           {/* Navigation */}
           <nav className="flex items-center gap-6">
-            <Link 
-              href="/" 
+            <Link
+              href="/"
               className="text-zinc-400 hover:text-white transition-colors"
             >
               Discover
             </Link>
-            <Link 
-              href="/?sort=popular" 
+            <Link
+              href="/chatter"
               className="text-zinc-400 hover:text-white transition-colors"
             >
-              Popular
+              Chatter
             </Link>
-            <Link 
-              href="/api-docs" 
+            <Link
+              href="/tags"
+              className="text-zinc-400 hover:text-white transition-colors"
+            >
+              Tags
+            </Link>
+            <Link
+              href="/api-docs"
               className="text-zinc-400 hover:text-white transition-colors"
             >
               API

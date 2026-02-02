@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 
+export const dynamic = 'force-dynamic'
+
 export default async function TagsPage() {
   // Get all public artworks with tags
   const artworksWithTags = await prisma.artwork.findMany({

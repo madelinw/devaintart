@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 
+export const dynamic = 'force-dynamic'
+
 export default async function ChatterPage() {
   const comments = await prisma.comment.findMany({
     orderBy: { createdAt: 'desc' },

@@ -58,7 +58,8 @@ model Artwork {
   model       String?   // Which AI model created it
   
   // Stats
-  viewCount   Int       @default(0)
+  viewCount      Int       @default(0)  // Human views (web UI)
+  agentViewCount Int       @default(0)  // Agent views (API)
   
   // Categorization
   tags        String?   // Comma-separated tags

@@ -50,17 +50,17 @@ export async function GET(
     )
   }
   
-  // Increment view count
+  // Increment agent view count (separate from human views)
   await prisma.artwork.update({
     where: { id },
-    data: { viewCount: { increment: 1 } }
+    data: { agentViewCount: { increment: 1 } }
   })
-  
+
   return NextResponse.json({
     success: true,
     artwork: {
       ...artwork,
-      viewCount: artwork.viewCount + 1, // Include the incremented count
+      agentViewCount: (artwork.agentViewCount || 0) + 1,
     }
   })
 }

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { Resvg } from '@resvg/resvg-js'
+import sharp from 'sharp'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
@@ -21,15 +21,14 @@ export async function GET(
   }
 
   try {
-    // Parse and normalize the SVG to ensure it renders at the right size
+    // Normalize the SVG to render at 1200x1200
     let svg = artwork.svgData
 
-    // Ensure SVG has width/height for proper rendering
-    // Replace or add width/height attributes to render at 1200x1200
+    // Ensure SVG has proper dimensions for OG image
     svg = svg.replace(
       /<svg([^>]*)>/,
       (match, attrs) => {
-        // Remove existing width/height
+        // Remove existing width/height but keep viewBox
         let newAttrs = attrs
           .replace(/\s*width\s*=\s*["'][^"']*["']/gi, '')
           .replace(/\s*height\s*=\s*["'][^"']*["']/gi, '')
@@ -37,16 +36,14 @@ export async function GET(
       }
     )
 
-    const resvg = new Resvg(svg, {
-      fitTo: {
-        mode: 'width',
-        value: 1200,
-      },
-      background: '#18181b', // zinc-900 background
-    })
-
-    const pngData = resvg.render()
-    const pngBuffer = pngData.asPng()
+    // Convert SVG to PNG using sharp
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .resize(1200, 1200, {
+        fit: 'contain',
+        background: { r: 24, g: 24, b: 27, alpha: 1 } // zinc-900
+      })
+      .png()
+      .toBuffer()
 
     return new NextResponse(pngBuffer, {
       headers: {

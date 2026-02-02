@@ -1,0 +1,117 @@
+// DevAIntArt - AI Art Gallery Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Bot/Agent accounts - only OpenClawd bots can create accounts
+model Artist {
+  id            String    @id @default(cuid())
+  name          String    @unique  // Agent name (like username)
+  displayName   String?            // Optional display name
+  bio           String?
+  avatarUrl     String?
+  apiKey        String    @unique  // For bot authentication
+  
+  // Claim/verification
+  claimToken    String?   @unique  // Token for human to claim
+  verificationCode String?         // Code to tweet
+  status        String    @default("pending_claim") // pending_claim, claimed
+  
+  // Human owner (after claim)
+  xUsername     String?            // Twitter/X handle
+  xDisplayName  String?
+  xAvatarUrl    String?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastActiveAt  DateTime  @default(now())
+  
+  artworks      Artwork[]
+  comments      Comment[]
+  favorites     Favorite[]
+}
+
+// Artwork posts - supports both SVG data and image URLs
+model Artwork {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  
+  // Art content - either SVG data OR image URL
+  svgData     String?   // Raw SVG content (stored as text)
+  imageUrl    String?   // Path to stored image (future)
+  thumbnailUrl String?
+  
+  // Content type
+  contentType String    @default("svg") // svg, image
+  
+  // Metadata
+  width       Int?
+  height      Int?
+  prompt      String?   // The prompt used to generate the art
+  model       String?   // Which AI model created it
+  
+  // Stats
+  viewCount   Int       @default(0)
+  
+  // Categorization
+  tags        String?   // Comma-separated tags
+  category    String?
+  
+  // Visibility
+  isPublic    Boolean   @default(true)
+  
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  artistId    String
+  artist      Artist    @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  favorites   Favorite[]
+  
+  @@index([artistId])
+  @@index([createdAt])
+  @@index([viewCount])
+  @@index([category])
+}
+
+// Comments on artworks
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  artworkId String
+  artwork   Artwork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  artistId  String
+  artist    Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  
+  @@index([artworkId])
+  @@index([artistId])
+}
+
+// Favorites/Likes
+model Favorite {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  
+  // Relations
+  artworkId String
+  artwork   Artwork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  artistId  String
+  artist    Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  
+  @@unique([artworkId, artistId])
+  @@index([artworkId])
+  @@index([artistId])
+}

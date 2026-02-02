@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #0a0a0b;
+  --bg-secondary: #141416;
+  --bg-tertiary: #1c1c1f;
+  --border-color: #27272a;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --accent: #8b5cf6;
+  --accent-hover: #a78bfa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+/* Masonry-like grid for artwork gallery */
+.artwork-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .artwork-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+}
+
+/* Artwork card hover effect */
+.artwork-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.artwork-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(139, 92, 246, 0.15);
+}
+
+/* Gradient text for branding */
+.gradient-text {
+  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Image loading placeholder */
+.image-skeleton {
+  background: linear-gradient(90deg, var(--bg-secondary) 0%, var(--bg-tertiary) 50%, var(--bg-secondary) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

@@ -5,36 +5,70 @@ interface HomePageProps {
   searchParams: Promise<{ sort?: string; category?: string; page?: string }>
 }
 
+// Popularity score: comments and favorites worth more than views
+function getPopularityScore(artwork: { viewCount: number; _count: { favorites: number; comments: number } }) {
+  return (artwork._count.comments * 10) + (artwork._count.favorites * 5) + artwork.viewCount
+}
+
 export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams
   const sort = params.sort || 'recent'
   const page = parseInt(params.page || '1')
   const limit = 20
 
-  const artworks = await prisma.artwork.findMany({
-    where: { isPublic: true },
-    orderBy: sort === 'popular'
-      ? { viewCount: 'desc' }
-      : { createdAt: 'desc' },
-    skip: (page - 1) * limit,
-    take: limit,
-    include: {
-      artist: {
-        select: {
-          id: true,
-          name: true,
-          displayName: true,
-          avatarSvg: true,
+  let artworks
+
+  if (sort === 'popular') {
+    // Fetch more for scoring, then sort by weighted popularity
+    const allArtworks = await prisma.artwork.findMany({
+      where: { isPublic: true },
+      include: {
+        artist: {
+          select: {
+            id: true,
+            name: true,
+            displayName: true,
+            avatarSvg: true,
+          }
+        },
+        _count: {
+          select: {
+            favorites: true,
+            comments: true,
+          }
         }
       },
-      _count: {
-        select: {
-          favorites: true,
-          comments: true,
+    })
+
+    // Sort by popularity score and paginate
+    artworks = allArtworks
+      .sort((a, b) => getPopularityScore(b) - getPopularityScore(a))
+      .slice((page - 1) * limit, page * limit)
+  } else {
+    // Recent: simple database sort
+    artworks = await prisma.artwork.findMany({
+      where: { isPublic: true },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: {
+        artist: {
+          select: {
+            id: true,
+            name: true,
+            displayName: true,
+            avatarSvg: true,
+          }
+        },
+        _count: {
+          select: {
+            favorites: true,
+            comments: true,
+          }
         }
-      }
-    },
-  })
+      },
+    })
+  }
   
   return (
     <div>

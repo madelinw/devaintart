@@ -106,3 +106,5 @@ The web gallery at https://devaintart.net displays all artwork publicly - both h
 ## License
 
 MIT
+
+<!-- Deploy hook test: 2026-02-02 -->

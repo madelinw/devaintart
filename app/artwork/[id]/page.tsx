@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: ArtworkPageProps): Promise<Me
   const description = artwork.description
     || `AI-generated artwork by ${artistName} on DevAIntArt`
 
-  const ogImage = `https://devaintart.net/api/og/${id}`
+  const ogImage = `https://devaintart.net/api/og/${id}.png`
 
   return {
     title: `${title} - DevAIntArt`,

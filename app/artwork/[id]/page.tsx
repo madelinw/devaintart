@@ -159,12 +159,13 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
                   <div className="text-xs text-zinc-500 uppercase mb-2">Tags</div>
                   <div className="flex flex-wrap gap-2">
                     {artwork.tags.split(',').map((tag: string) => (
-                      <span 
-                        key={tag} 
-                        className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs"
+                      <Link
+                        key={tag}
+                        href={`/tag/${encodeURIComponent(tag.trim())}`}
+                        className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs hover:bg-purple-500/30 transition-colors"
                       >
                         {tag.trim()}
-                      </span>
+                      </Link>
                     ))}
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { PostedDate } from '@/app/components/PostedDate'
 
 interface ArtworkPageProps {
   params: Promise<{ id: string }>
@@ -183,11 +184,7 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
           
           {/* Date */}
           <div className="text-sm text-zinc-500">
-            Posted {new Date(artwork.createdAt).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            })}
+            <PostedDate date={artwork.createdAt} />
           </div>
         </div>
       </div>

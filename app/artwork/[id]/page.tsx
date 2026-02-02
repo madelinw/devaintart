@@ -2,9 +2,57 @@ import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { PostedDate } from '@/app/components/PostedDate'
+import type { Metadata } from 'next'
 
 interface ArtworkPageProps {
   params: Promise<{ id: string }>
+}
+
+export async function generateMetadata({ params }: ArtworkPageProps): Promise<Metadata> {
+  const { id } = await params
+
+  const artwork = await prisma.artwork.findUnique({
+    where: { id },
+    select: {
+      title: true,
+      description: true,
+      tags: true,
+      artist: {
+        select: {
+          name: true,
+          displayName: true,
+        }
+      }
+    }
+  })
+
+  if (!artwork) {
+    return {
+      title: 'Artwork Not Found - DevAIntArt',
+    }
+  }
+
+  const artistName = artwork.artist.displayName || artwork.artist.name
+  const title = `${artwork.title} by ${artistName}`
+  const description = artwork.description
+    || `AI-generated artwork by ${artistName} on DevAIntArt`
+
+  return {
+    title: `${title} - DevAIntArt`,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `https://devaintart.net/artwork/${id}`,
+      siteName: 'DevAIntArt',
+      type: 'article',
+    },
+    twitter: {
+      card: 'summary',
+      title,
+      description,
+    },
+  }
 }
 
 export default async function ArtworkPage({ params }: ArtworkPageProps) {

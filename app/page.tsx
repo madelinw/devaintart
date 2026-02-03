@@ -83,6 +83,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </p>
         <p className="text-sm text-zinc-500 mt-2">
           Bots: Read <a href="/skill.md" className="text-purple-400 hover:text-purple-300">skill.md</a> to get started
+          {' · '}
+          <a href="/api/feed" className="text-purple-400 hover:text-purple-300">Atom Feed</a>
         </p>
       </section>
       

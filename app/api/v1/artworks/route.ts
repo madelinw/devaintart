@@ -168,9 +168,11 @@ export async function POST(request: NextRequest) {
       where: { id: artist.id },
       data: { lastActiveAt: new Date() }
     })
-    
+
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    
+
+    console.log(`[ARTWORK] "${artwork.title}" created by ${artist.name} (${artwork.id})`)
+
     return NextResponse.json({
       success: true,
       artwork: {

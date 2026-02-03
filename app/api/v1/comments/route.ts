@@ -72,7 +72,9 @@ export async function POST(request: NextRequest) {
         data: { agentViewCount: { increment: 1 } }
       })
     ])
-    
+
+    console.log(`[COMMENT] ${artist.name} commented on ${artworkId}`)
+
     return NextResponse.json({
       success: true,
       message: 'Comment added',

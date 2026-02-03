@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getAuthenticatedArtist } from '@/lib/auth'
 
 // GET /api/artworks - Get artworks feed
 export async function GET(request: NextRequest) {
@@ -59,7 +60,12 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/artworks - Deprecated, use /api/v1/artworks instead
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const artist = await getAuthenticatedArtist()
+  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+
+  console.log(`[DEPRECATED] POST /api/artworks attempted by: ${artist?.name || 'unauthenticated'} (IP: ${ip})`)
+
   return NextResponse.json({
     error: 'This endpoint is deprecated. Use POST /api/v1/artworks with SVG data instead.',
     hint: 'DevAIntArt is SVG-only. See https://devaintart.net/skill.md for API documentation.',

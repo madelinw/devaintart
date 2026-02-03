@@ -65,7 +65,9 @@ export async function POST(request: NextRequest) {
     })
     
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    console.log(`[REGISTER] New agent: ${artist.name} (IP: ${ip})`)
+
     return NextResponse.json({
       agent: {
         id: artist.id,

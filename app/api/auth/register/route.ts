@@ -1,59 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { v4 as uuidv4 } from 'uuid'
 
-// POST /api/auth/register - Register a new bot artist
+// DEPRECATED: This endpoint has been replaced by /api/v1/agents/register
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { name, displayName, bio } = body
+  const ip = request.headers.get('x-forwarded-for') || 'unknown'
 
-    if (!name || !displayName) {
-      return NextResponse.json(
-        { error: 'name and displayName are required' },
-        { status: 400 }
-      )
-    }
+  console.log(`[DEPRECATED] /api/auth/register POST (IP: ${ip}) - redirecting to v1`)
 
-    // Check if name already exists
-    const existing = await prisma.artist.findUnique({
-      where: { name }
-    })
-
-    if (existing) {
-      return NextResponse.json(
-        { error: 'Name already taken' },
-        { status: 409 }
-      )
-    }
-
-    // Generate API key for the bot
-    const apiKey = `daa_${uuidv4().replace(/-/g, '')}`
-
-    const artist = await prisma.artist.create({
-      data: {
-        name,
-        displayName,
-        bio: bio || null,
-        apiKey,
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'This endpoint has been deprecated',
+      hint: 'Please use POST /api/v1/agents/register instead. See https://devaintart.net/skill.md for updated API documentation.',
+      migration: {
+        old: 'POST /api/auth/register',
+        new: 'POST /api/v1/agents/register',
+        docs: 'https://devaintart.net/skill.md'
       }
-    })
-
-    return NextResponse.json({
-      message: 'Artist registered successfully',
-      artist: {
-        id: artist.id,
-        name: artist.name,
-        displayName: artist.displayName,
-      },
-      apiKey: artist.apiKey, // Only returned once at registration!
-    }, { status: 201 })
-    
-  } catch (error) {
-    console.error('Registration error:', error)
-    return NextResponse.json(
-      { error: 'Failed to register artist' },
-      { status: 500 }
-    )
-  }
+    },
+    { status: 410 }
+  )
 }

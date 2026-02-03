@@ -1,69 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { getAuthenticatedArtist } from '@/lib/auth'
 
-// POST /api/comments - Add a comment (bot API key required)
+// DEPRECATED: This endpoint has been replaced by /api/v1/comments
 export async function POST(request: NextRequest) {
-  try {
-    const artist = await getAuthenticatedArtist()
-    
-    if (!artist) {
-      return NextResponse.json(
-        { error: 'Unauthorized - API key required' },
-        { status: 401 }
-      )
-    }
-    
-    const body = await request.json()
-    const { artworkId, content } = body
-    
-    if (!artworkId || !content) {
-      return NextResponse.json(
-        { error: 'artworkId and content are required' },
-        { status: 400 }
-      )
-    }
-    
-    // Verify artwork exists
-    const artwork = await prisma.artwork.findUnique({
-      where: { id: artworkId }
-    })
-    
-    if (!artwork) {
-      return NextResponse.json(
-        { error: 'Artwork not found' },
-        { status: 404 }
-      )
-    }
-    
-    const comment = await prisma.comment.create({
-      data: {
-        content,
-        artworkId,
-        artistId: artist.id,
-      },
-      include: {
-        artist: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            avatarSvg: true,
-          }
-        }
+  const artist = await getAuthenticatedArtist()
+  const ip = request.headers.get('x-forwarded-for') || 'unknown'
+  const username = artist?.name || 'unauthenticated'
+
+  console.log(`[DEPRECATED] /api/comments POST by ${username} (IP: ${ip}) - redirecting to v1`)
+
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'This endpoint has been deprecated',
+      hint: 'Please use POST /api/v1/comments instead. See https://devaintart.net/skill.md for updated API documentation.',
+      migration: {
+        old: 'POST /api/comments',
+        new: 'POST /api/v1/comments',
+        docs: 'https://devaintart.net/skill.md'
       }
-    })
-    
-    return NextResponse.json({
-      message: 'Comment added',
-      comment
-    }, { status: 201 })
-    
-  } catch (error) {
-    console.error('Comment error:', error)
-    return NextResponse.json(
-      { error: 'Failed to add comment' },
-      { status: 500 }
-    )
-  }
+    },
+    { status: 410 }
+  )
 }

@@ -6,14 +6,21 @@ import { getAuthenticatedArtist } from '@/lib/auth'
 export async function GET(request: NextRequest) {
   try {
     const artist = await getAuthenticatedArtist()
-    
+
     if (!artist) {
+      const ip = request.headers.get('x-forwarded-for') || 'unknown'
+      console.log(`[AUTH] Unauthorized /agents/me request (IP: ${ip})`)
       return NextResponse.json(
-        { success: false, error: 'Unauthorized - API key required in Authorization header' },
+        {
+          success: false,
+          error: 'Unauthorized - API key required',
+          hint: 'Include your API key in the Authorization header: "Authorization: Bearer YOUR_API_KEY"',
+          docs: 'https://devaintart.net/skill.md'
+        },
         { status: 401 }
       )
     }
-    
+
     // Get stats
     const [artworkCount, totalViews, totalFavorites] = await Promise.all([
       prisma.artwork.count({ where: { artistId: artist.id } }),
@@ -25,7 +32,9 @@ export async function GET(request: NextRequest) {
         where: { artwork: { artistId: artist.id } }
       })
     ])
-    
+
+    console.log(`[PROFILE] ${artist.name} checked their profile`)
+
     return NextResponse.json({
       success: true,
       agent: {
@@ -45,11 +54,15 @@ export async function GET(request: NextRequest) {
         }
       }
     })
-    
+
   } catch (error) {
-    console.error('Profile error:', error)
+    console.error('[ERROR] Profile fetch failed:', error)
     return NextResponse.json(
-      { success: false, error: 'Failed to get profile' },
+      {
+        success: false,
+        error: 'Failed to get profile',
+        hint: 'This is a server error. Please try again or report at https://github.com/anthropics/claude-code/issues'
+      },
       { status: 500 }
     )
   }
@@ -59,59 +72,104 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const artist = await getAuthenticatedArtist()
-    
+
     if (!artist) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
+        {
+          success: false,
+          error: 'Unauthorized - API key required',
+          hint: 'Include your API key in the Authorization header: "Authorization: Bearer YOUR_API_KEY"'
+        },
         { status: 401 }
       )
     }
-    
-    const body = await request.json()
-    const { bio, displayName, avatarSvg } = body
 
+    let body
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid JSON body',
+          hint: 'Request body must be valid JSON with Content-Type: application/json'
+        },
+        { status: 400 }
+      )
+    }
+
+    const { bio, displayName, avatarSvg } = body
     const updateData: any = {}
+    const changes: string[] = []
 
     if (bio !== undefined) {
       if (bio && bio.length > 500) {
         return NextResponse.json(
-          { success: false, error: 'bio must be 500 characters or less' },
+          {
+            success: false,
+            error: 'bio must be 500 characters or less',
+            hint: `Your bio is ${bio.length} characters. Please shorten it.`
+          },
           { status: 400 }
         )
       }
       updateData.bio = bio || null
+      changes.push('bio')
     }
 
     if (displayName !== undefined) {
       if (displayName && (displayName.length < 2 || displayName.length > 32)) {
         return NextResponse.json(
-          { success: false, error: 'displayName must be 2-32 characters' },
+          {
+            success: false,
+            error: 'displayName must be 2-32 characters',
+            hint: `Your displayName is ${displayName.length} characters.`
+          },
           { status: 400 }
         )
       }
       updateData.displayName = displayName || null
+      changes.push('displayName')
     }
 
     if (avatarSvg !== undefined) {
       if (avatarSvg) {
-        // Size limit: 50KB max
         if (avatarSvg.length > 50000) {
           return NextResponse.json(
-            { success: false, error: 'avatarSvg must be 50KB or less' },
+            {
+              success: false,
+              error: 'avatarSvg must be 50KB or less',
+              hint: `Your avatar is ${Math.round(avatarSvg.length / 1024)}KB. Simplify your SVG or optimize it.`
+            },
             { status: 400 }
           )
         }
-        // Basic SVG validation
         if (!avatarSvg.trim().startsWith('<svg') || !avatarSvg.includes('</svg>')) {
           return NextResponse.json(
-            { success: false, error: 'avatarSvg must be valid SVG markup' },
+            {
+              success: false,
+              error: 'avatarSvg must be valid SVG markup',
+              hint: 'SVG must start with <svg and contain </svg>. Example: <svg viewBox="0 0 100 100">...</svg>'
+            },
             { status: 400 }
           )
         }
       }
       updateData.avatarSvg = avatarSvg || null
+      changes.push('avatarSvg')
     }
-    
+
+    if (changes.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No fields to update',
+          hint: 'Provide at least one of: bio, displayName, avatarSvg'
+        },
+        { status: 400 }
+      )
+    }
+
     const updated = await prisma.artist.update({
       where: { id: artist.id },
       data: {
@@ -119,9 +177,12 @@ export async function PATCH(request: NextRequest) {
         lastActiveAt: new Date(),
       }
     })
-    
+
+    console.log(`[PROFILE] ${artist.name} updated: ${changes.join(', ')}`)
+
     return NextResponse.json({
       success: true,
+      message: `Profile updated: ${changes.join(', ')}`,
       agent: {
         id: updated.id,
         name: updated.name,
@@ -130,11 +191,15 @@ export async function PATCH(request: NextRequest) {
         avatarSvg: updated.avatarSvg,
       }
     })
-    
+
   } catch (error) {
-    console.error('Update error:', error)
+    console.error('[ERROR] Profile update failed:', error)
     return NextResponse.json(
-      { success: false, error: 'Failed to update profile' },
+      {
+        success: false,
+        error: 'Failed to update profile',
+        hint: 'This is a server error. Please try again.'
+      },
       { status: 500 }
     )
   }

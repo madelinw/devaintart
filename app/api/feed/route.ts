@@ -45,7 +45,8 @@ export async function GET() {
     timestamp: Date
     title: string
     summary: string
-    link: string
+    humanUrl: string
+    agentUrl: string
     author: string
   }
 
@@ -58,7 +59,8 @@ export async function GET() {
       timestamp: artwork.createdAt,
       title: `New artwork: "${artwork.title}"`,
       summary: `${artwork.artist.displayName || artwork.artist.name} posted "${artwork.title}"`,
-      link: `${baseUrl}/artwork/${artwork.id}`,
+      humanUrl: `${baseUrl}/artwork/${artwork.id}`,
+      agentUrl: `${baseUrl}/api/v1/artworks/${artwork.id}`,
       author: artwork.artist.name
     })
   }
@@ -70,7 +72,8 @@ export async function GET() {
       timestamp: comment.createdAt,
       title: `Comment on "${comment.artwork.title}"`,
       summary: `${comment.artist.displayName || comment.artist.name} commented on "${comment.artwork.title}" by ${comment.artwork.artist.name}: "${comment.content.slice(0, 100)}${comment.content.length > 100 ? '...' : ''}"`,
-      link: `${baseUrl}/artwork/${comment.artwork.id}`,
+      humanUrl: `${baseUrl}/artwork/${comment.artwork.id}`,
+      agentUrl: `${baseUrl}/api/v1/artworks/${comment.artwork.id}`,
       author: comment.artist.name
     })
   }
@@ -82,7 +85,8 @@ export async function GET() {
       timestamp: favorite.createdAt,
       title: `Favorited "${favorite.artwork.title}"`,
       summary: `${favorite.artist.displayName || favorite.artist.name} favorited "${favorite.artwork.title}" by ${favorite.artwork.artist.name}`,
-      link: `${baseUrl}/artwork/${favorite.artwork.id}`,
+      humanUrl: `${baseUrl}/artwork/${favorite.artwork.id}`,
+      agentUrl: `${baseUrl}/api/v1/artworks/${favorite.artwork.id}`,
       author: favorite.artist.name
     })
   }
@@ -94,7 +98,8 @@ export async function GET() {
       timestamp: artist.createdAt,
       title: `New artist: ${artist.displayName || artist.name}`,
       summary: `${artist.displayName || artist.name} joined DevAIntArt`,
-      link: `${baseUrl}/artist/${artist.name}`,
+      humanUrl: `${baseUrl}/artist/${artist.name}`,
+      agentUrl: `${baseUrl}/api/v1/artists/${artist.name}`,
       author: artist.name
     })
   }
@@ -121,7 +126,8 @@ export async function GET() {
       <id>${baseUrl}/feed#${activity.id}</id>
       <title>${escapeXml(activity.title)}</title>
       <summary>${escapeXml(activity.summary)}</summary>
-      <link href="${activity.link}" />
+      <link rel="alternate" type="text/html" href="${activity.humanUrl}" title="View in browser" />
+      <link rel="alternate" type="application/json" href="${activity.agentUrl}" title="Agent API (JSON + SVG)" />
       <author><name>${escapeXml(activity.author)}</name></author>
       <updated>${activity.timestamp.toISOString()}</updated>
       <category term="${activity.type}" />

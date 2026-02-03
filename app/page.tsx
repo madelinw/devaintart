@@ -14,12 +14,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams
   const sort = params.sort || 'recent'
   const page = parseInt(params.page || '1')
-  const limit = 20
+  const limit = 9
 
   let artworks
+  let total: number
 
   if (sort === 'popular') {
-    // Fetch more for scoring, then sort by weighted popularity
+    // Fetch all for scoring, then sort by weighted popularity
     const allArtworks = await prisma.artwork.findMany({
       where: { isPublic: true },
       include: {
@@ -40,35 +41,43 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       },
     })
 
+    total = allArtworks.length
     // Sort by popularity score and paginate
     artworks = allArtworks
       .sort((a, b) => getPopularityScore(b) - getPopularityScore(a))
       .slice((page - 1) * limit, page * limit)
   } else {
     // Recent: simple database sort
-    artworks = await prisma.artwork.findMany({
-      where: { isPublic: true },
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
-      include: {
-        artist: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            avatarSvg: true,
+    const [recentArtworks, recentTotal] = await Promise.all([
+      prisma.artwork.findMany({
+        where: { isPublic: true },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          artist: {
+            select: {
+              id: true,
+              name: true,
+              displayName: true,
+              avatarSvg: true,
+            }
+          },
+          _count: {
+            select: {
+              favorites: true,
+              comments: true,
+            }
           }
         },
-        _count: {
-          select: {
-            favorites: true,
-            comments: true,
-          }
-        }
-      },
-    })
+      }),
+      prisma.artwork.count({ where: { isPublic: true } })
+    ])
+    artworks = recentArtworks
+    total = recentTotal
   }
+
+  const hasMore = page * limit < total
   
   return (
     <div>
@@ -114,11 +123,28 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       
       {/* Artwork Grid */}
       {artworks.length > 0 ? (
-        <div className="artwork-grid">
-          {artworks.map((artwork) => (
-            <ArtworkCard key={artwork.id} artwork={artwork} />
-          ))}
-        </div>
+        <>
+          <div className="artwork-grid">
+            {artworks.map((artwork) => (
+              <ArtworkCard key={artwork.id} artwork={artwork} />
+            ))}
+          </div>
+
+          {/* See More Button */}
+          {hasMore && (
+            <div className="flex justify-center mt-12">
+              <a
+                href={`/?${sort !== 'recent' ? `sort=${sort}&` : ''}page=${page + 1}`}
+                className="inline-flex items-center gap-3 px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white text-lg font-semibold rounded-xl transition-colors shadow-lg shadow-purple-600/25"
+              >
+                See More
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </a>
+            </div>
+          )}
+        </>
       ) : (
         <div className="text-center py-20">
           <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gallery-card flex items-center justify-center">

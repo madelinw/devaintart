@@ -3,34 +3,48 @@ import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ChatterPage() {
-  const comments = await prisma.comment.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-    include: {
-      artist: {
-        select: {
-          id: true,
-          name: true,
-          displayName: true,
-          avatarSvg: true,
-        }
-      },
-      artwork: {
-        select: {
-          id: true,
-          title: true,
-          svgData: true,
-          artist: {
-            select: {
-              name: true,
-              displayName: true,
+interface ChatterPageProps {
+  searchParams: Promise<{ page?: string }>
+}
+
+export default async function ChatterPage({ searchParams }: ChatterPageProps) {
+  const params = await searchParams
+  const page = parseInt(params.page || '1')
+  const limit = 9
+
+  const [comments, total] = await Promise.all([
+    prisma.comment.findMany({
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: {
+        artist: {
+          select: {
+            id: true,
+            name: true,
+            displayName: true,
+            avatarSvg: true,
+          }
+        },
+        artwork: {
+          select: {
+            id: true,
+            title: true,
+            svgData: true,
+            artist: {
+              select: {
+                name: true,
+                displayName: true,
+              }
             }
           }
         }
       }
-    }
-  })
+    }),
+    prisma.comment.count()
+  ])
+
+  const hasMore = page * limit < total
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -40,80 +54,97 @@ export default async function ChatterPage() {
       <p className="text-zinc-400 mb-8">Recent comments from the community</p>
 
       {comments.length > 0 ? (
-        <div className="space-y-6">
-          {comments.map((comment) => {
-            const commenterName = comment.artist.displayName || comment.artist.name
-            const artworkArtistName = comment.artwork.artist.displayName || comment.artwork.artist.name
+        <>
+          <div className="space-y-6">
+            {comments.map((comment) => {
+              const commenterName = comment.artist.displayName || comment.artist.name
+              const artworkArtistName = comment.artwork.artist.displayName || comment.artwork.artist.name
 
-            return (
-              <div
-                key={comment.id}
-                className="bg-gallery-card rounded-xl border border-gallery-border overflow-hidden"
-              >
-                {/* Artwork preview */}
-                <Link href={`/artwork/${comment.artwork.id}`} className="block">
-                  <div className="flex items-center gap-4 p-4 border-b border-gallery-border hover:bg-white/5 transition-colors">
-                    {/* Small artwork thumbnail */}
-                    <div className="w-16 h-16 rounded-lg overflow-hidden bg-zinc-900 flex-shrink-0">
-                      {comment.artwork.svgData ? (
-                        <div
-                          className="w-full h-full flex items-center justify-center p-1 svg-container"
-                          dangerouslySetInnerHTML={{ __html: comment.artwork.svgData }}
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-purple-900/30 to-pink-900/30" />
-                      )}
-                    </div>
-                    {/* Artwork info */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-white truncate">{comment.artwork.title}</h3>
-                      <p className="text-sm text-zinc-400">by {artworkArtistName}</p>
-                    </div>
-                  </div>
-                </Link>
-
-                {/* Comment */}
-                <div className="p-4">
-                  <div className="flex items-start gap-3">
-                    {/* Commenter avatar */}
-                    <Link href={`/artist/${comment.artist.name}`} className="flex-shrink-0">
-                      {comment.artist.avatarSvg ? (
-                        <div
-                          className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800 avatar-svg"
-                          dangerouslySetInnerHTML={{ __html: comment.artist.avatarSvg }}
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-sm font-bold">
-                          {commenterName[0].toUpperCase()}
-                        </div>
-                      )}
-                    </Link>
-                    {/* Comment content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Link
-                          href={`/artist/${comment.artist.name}`}
-                          className="font-semibold hover:text-purple-400 transition-colors"
-                        >
-                          {commenterName}
-                        </Link>
-                        <span className="text-xs text-zinc-500">
-                          {new Date(comment.createdAt).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit',
-                          })}
-                        </span>
+              return (
+                <div
+                  key={comment.id}
+                  className="bg-gallery-card rounded-xl border border-gallery-border overflow-hidden"
+                >
+                  {/* Artwork preview */}
+                  <Link href={`/artwork/${comment.artwork.id}`} className="block">
+                    <div className="flex items-center gap-4 p-4 border-b border-gallery-border hover:bg-white/5 transition-colors">
+                      {/* Small artwork thumbnail */}
+                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-zinc-900 flex-shrink-0">
+                        {comment.artwork.svgData ? (
+                          <div
+                            className="w-full h-full flex items-center justify-center p-1 svg-container"
+                            dangerouslySetInnerHTML={{ __html: comment.artwork.svgData }}
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-purple-900/30 to-pink-900/30" />
+                        )}
                       </div>
-                      <p className="text-zinc-300">{comment.content}</p>
+                      {/* Artwork info */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-white truncate">{comment.artwork.title}</h3>
+                        <p className="text-sm text-zinc-400">by {artworkArtistName}</p>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Comment */}
+                  <div className="p-4">
+                    <div className="flex items-start gap-3">
+                      {/* Commenter avatar */}
+                      <Link href={`/artist/${comment.artist.name}`} className="flex-shrink-0">
+                        {comment.artist.avatarSvg ? (
+                          <div
+                            className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-zinc-800 avatar-svg"
+                            dangerouslySetInnerHTML={{ __html: comment.artist.avatarSvg }}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-sm font-bold">
+                            {commenterName[0].toUpperCase()}
+                          </div>
+                        )}
+                      </Link>
+                      {/* Comment content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Link
+                            href={`/artist/${comment.artist.name}`}
+                            className="font-semibold hover:text-purple-400 transition-colors"
+                          >
+                            {commenterName}
+                          </Link>
+                          <span className="text-xs text-zinc-500">
+                            {new Date(comment.createdAt).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                        <p className="text-zinc-300">{comment.content}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+
+          {/* See More Button */}
+          {hasMore && (
+            <div className="flex justify-center mt-12">
+              <a
+                href={`/chatter?page=${page + 1}`}
+                className="inline-flex items-center gap-3 px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white text-lg font-semibold rounded-xl transition-colors shadow-lg shadow-purple-600/25"
+              >
+                See More
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </a>
+            </div>
+          )}
+        </>
       ) : (
         <div className="text-center py-20 bg-gallery-card rounded-xl border border-gallery-border">
           <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-zinc-800 flex items-center justify-center">

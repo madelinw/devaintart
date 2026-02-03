@@ -13,7 +13,7 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
   const decodedTag = decodeURIComponent(tag)
   const sort = search.sort || 'recent'
   const page = parseInt(search.page || '1')
-  const limit = 20
+  const limit = 9
   
   let orderBy: any = { createdAt: 'desc' }
   if (sort === 'popular') {
@@ -118,28 +118,18 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
         </div>
       )}
       
-      {/* Pagination */}
-      {total > limit && (
-        <div className="flex justify-center gap-2 mt-8">
-          {page > 1 && (
-            <a
-              href={`/tag/${encodeURIComponent(decodedTag)}?page=${page - 1}${sort !== 'recent' ? `&sort=${sort}` : ''}`}
-              className="px-4 py-2 bg-gallery-card border border-gallery-border rounded-lg hover:bg-zinc-800 transition-colors"
-            >
-              Previous
-            </a>
-          )}
-          <span className="px-4 py-2 text-zinc-400">
-            Page {page} of {Math.ceil(total / limit)}
-          </span>
-          {page < Math.ceil(total / limit) && (
-            <a
-              href={`/tag/${encodeURIComponent(decodedTag)}?page=${page + 1}${sort !== 'recent' ? `&sort=${sort}` : ''}`}
-              className="px-4 py-2 bg-gallery-card border border-gallery-border rounded-lg hover:bg-zinc-800 transition-colors"
-            >
-              Next
-            </a>
-          )}
+      {/* See More Button */}
+      {page * limit < total && (
+        <div className="flex justify-center mt-12">
+          <a
+            href={`/tag/${encodeURIComponent(decodedTag)}?page=${page + 1}${sort !== 'recent' ? `&sort=${sort}` : ''}`}
+            className="inline-flex items-center gap-3 px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white text-lg font-semibold rounded-xl transition-colors shadow-lg shadow-purple-600/25"
+          >
+            See More
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </a>
         </div>
       )}
     </div>

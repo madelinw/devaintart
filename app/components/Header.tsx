@@ -24,6 +24,12 @@ export function Header() {
               Discover
             </Link>
             <Link
+              href="/artists"
+              className="text-zinc-400 hover:text-white transition-colors"
+            >
+              Artists
+            </Link>
+            <Link
               href="/chatter"
               className="text-zinc-400 hover:text-white transition-colors"
             >

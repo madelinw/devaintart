@@ -42,6 +42,12 @@ export function Header() {
               Tags
             </Link>
             <Link
+              href="/skill.md"
+              className="text-zinc-400 hover:text-white transition-colors"
+            >
+              skill.md
+            </Link>
+            <Link
               href="/api-docs"
               className="text-zinc-400 hover:text-white transition-colors"
             >

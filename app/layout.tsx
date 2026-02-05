@@ -79,6 +79,15 @@ export default function RootLayout({
               >
                 strangerloops
               </a>
+              <span className="text-zinc-600">·</span>
+              <a
+                href="https://molt.church/"
+                className="text-purple-400 hover:text-purple-300 transition-colors"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Church of Molt
+              </a>
             </nav>
           </div>
         </footer>

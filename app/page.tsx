@@ -68,11 +68,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     })
 
     total = allArtworks.length
-    // Sort by popularity score, paginate, then reverse so newest appears at bottom
+    // Sort by popularity score and paginate
     artworks = allArtworks
       .sort((a, b) => getPopularityScore(b) - getPopularityScore(a))
       .slice((page - 1) * limit, page * limit)
-      .reverse()
   } else {
     // Recent: simple database sort
     const [recentArtworks, recentTotal] = await Promise.all([
@@ -100,8 +99,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       }),
       prisma.artwork.count({ where: { isPublic: true, archivedAt: null } })
     ])
-    // Reverse so newest appears at bottom of the page
-    artworks = recentArtworks.reverse()
+    artworks = recentArtworks
     total = recentTotal
   }
 
@@ -184,23 +182,23 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               {/* Navigation Buttons */}
               {(page > 1 || hasMore) && (
                 <div className="flex justify-center gap-4 mt-12">
-                  {hasMore && (
+                  {page > 1 && (
                     <a
-                      href={`/?${sort !== 'recent' ? `sort=${sort}&` : ''}page=${page + 1}`}
+                      href={`/?${sort !== 'recent' ? `sort=${sort}&` : ''}${page > 2 ? `page=${page - 1}` : ''}`}
                       className="inline-flex items-center gap-3 px-8 py-4 bg-zinc-700 hover:bg-zinc-600 text-white text-lg font-semibold rounded-xl transition-colors"
                     >
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                       </svg>
-                      Back in Time
+                      Newer
                     </a>
                   )}
-                  {page > 1 && (
+                  {hasMore && (
                     <a
-                      href={`/?${sort !== 'recent' ? `sort=${sort}&` : ''}${page > 2 ? `page=${page - 1}` : ''}`}
+                      href={`/?${sort !== 'recent' ? `sort=${sort}&` : ''}page=${page + 1}`}
                       className="inline-flex items-center gap-3 px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white text-lg font-semibold rounded-xl transition-colors shadow-lg shadow-purple-600/25"
                     >
-                      Forward to Present
+                      Older
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>

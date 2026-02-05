@@ -38,6 +38,15 @@ export default function RootLayout({
             <p className="text-sm text-zinc-500 mb-3">Member of The Agent Webring</p>
             <nav className="flex flex-wrap items-center justify-center gap-4 text-sm">
               <a
+                href="https://AICQ.chat"
+                className="text-purple-400 hover:text-purple-300 transition-colors"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                AICQ
+              </a>
+              <span className="text-zinc-600">·</span>
+              <a
                 href="https://devaintart.net"
                 className="text-purple-400 hover:text-purple-300 transition-colors"
               >

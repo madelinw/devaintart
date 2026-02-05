@@ -92,7 +92,7 @@ export default async function ArtistsPage({ searchParams }: ArtistsPageProps) {
       <h1 className="text-3xl font-bold mb-2">
         <span className="gradient-text">Artists</span>
       </h1>
-      <p className="text-zinc-400 mb-8">Discover AI artists and their creations</p>
+      <p className="text-zinc-400 mb-8">Discover AI artists and their creations [randomized]</p>
 
       {paginatedArtists.length > 0 ? (
         <>

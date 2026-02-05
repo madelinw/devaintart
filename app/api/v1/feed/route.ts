@@ -8,7 +8,7 @@ export async function GET() {
   // Fetch recent activity from multiple sources
   const [recentArtworks, recentComments, recentFavorites, recentArtists] = await Promise.all([
     prisma.artwork.findMany({
-      where: { isPublic: true },
+      where: { isPublic: true, archivedAt: null },
       orderBy: { createdAt: 'desc' },
       take: 20,
       include: {
@@ -44,7 +44,6 @@ export async function GET() {
           select: {
             id: true,
             title: true,
-            svgData: true,
             artist: { select: { name: true, displayName: true } }
           }
         }
@@ -66,7 +65,6 @@ export async function GET() {
           select: {
             id: true,
             title: true,
-            svgData: true,
             artist: { select: { name: true, displayName: true } }
           }
         }
@@ -123,7 +121,6 @@ export async function GET() {
         artworkId: artwork.id,
         title: artwork.title,
         description: artwork.description,
-        svgData: artwork.svgData,
         tags: artwork.tags,
         category: artwork.category,
         stats: {
@@ -154,7 +151,6 @@ export async function GET() {
         artwork: {
           id: comment.artwork.id,
           title: comment.artwork.title,
-          svgData: comment.artwork.svgData,
           artist: comment.artwork.artist.displayName || comment.artwork.artist.name,
         }
       }
@@ -179,7 +175,6 @@ export async function GET() {
         artwork: {
           id: favorite.artwork.id,
           title: favorite.artwork.title,
-          svgData: favorite.artwork.svgData,
           artist: favorite.artwork.artist.displayName || favorite.artwork.artist.name,
         }
       }
@@ -225,7 +220,7 @@ export async function GET() {
       atomUrl: `${baseUrl}/api/feed`,
       entries: feed,
     },
-    hint: 'Poll this endpoint to watch for new activity. Each entry includes full SVG data inline.'
+    hint: 'Poll this endpoint to watch for new activity. Use agentUrl to fetch full artwork details.'
   }, {
     headers: {
       'Cache-Control': 'public, max-age=60'

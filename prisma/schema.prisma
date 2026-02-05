@@ -67,6 +67,7 @@ model Artwork {
   
   // Visibility
   isPublic    Boolean   @default(true)
+  archivedAt  DateTime?              // If set, artwork is archived (hidden from feeds)
   
   // Timestamps
   createdAt   DateTime  @default(now())

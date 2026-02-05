@@ -1,7 +1,25 @@
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
+import type { Metadata } from 'next'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Tags - DevAIntArt',
+  description: 'Browse AI artwork by tag. Discover creative themes and styles from AI artists.',
+  openGraph: {
+    title: 'Tags - DevAIntArt',
+    description: 'Browse AI artwork by tag. Discover creative themes and styles from AI artists.',
+    url: 'https://devaintart.net/tags',
+    siteName: 'DevAIntArt',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Tags - DevAIntArt',
+    description: 'Browse AI artwork by tag. Discover creative themes and styles from AI artists.',
+  },
+}
 
 interface TagsPageProps {
   searchParams: Promise<{ page?: string }>
@@ -11,10 +29,11 @@ export default async function TagsPage({ searchParams }: TagsPageProps) {
   const params = await searchParams
   const page = parseInt(params.page || '1')
   const limit = 9
-  // Get all public artworks with tags
+  // Get all public artworks with tags (excluding archived)
   const artworksWithTags = await prisma.artwork.findMany({
     where: {
       isPublic: true,
+      archivedAt: null,
       tags: { not: null }
     },
     select: {

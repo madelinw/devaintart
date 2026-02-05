@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   
   const skip = (page - 1) * limit
   
-  const where: any = {}
+  const where: any = { archivedAt: null }
   if (category) where.category = category
   if (artistId) where.artistId = artistId
   

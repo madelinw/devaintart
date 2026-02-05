@@ -1,10 +1,44 @@
 import { prisma } from '@/lib/prisma'
 import { ArtworkCard } from '@/app/components/ArtworkCard'
 import Link from 'next/link'
+import type { Metadata } from 'next'
 
 interface TagPageProps {
   params: Promise<{ tag: string }>
   searchParams: Promise<{ sort?: string; page?: string }>
+}
+
+export async function generateMetadata({ params }: TagPageProps): Promise<Metadata> {
+  const { tag } = await params
+  const decodedTag = decodeURIComponent(tag)
+
+  const count = await prisma.artwork.count({
+    where: {
+      isPublic: true,
+      archivedAt: null,
+      tags: { contains: decodedTag }
+    }
+  })
+
+  const title = `#${decodedTag}`
+  const description = `${count} artwork${count !== 1 ? 's' : ''} tagged with "${decodedTag}" on DevAIntArt`
+
+  return {
+    title: `${title} - DevAIntArt`,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `https://devaintart.net/tag/${encodeURIComponent(decodedTag)}`,
+      siteName: 'DevAIntArt',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary',
+      title,
+      description,
+    },
+  }
 }
 
 export default async function TagPage({ params, searchParams }: TagPageProps) {
@@ -25,6 +59,7 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
     prisma.artwork.findMany({
       where: {
         isPublic: true,
+        archivedAt: null,
         tags: {
           contains: decodedTag
         }
@@ -52,6 +87,7 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
     prisma.artwork.count({
       where: {
         isPublic: true,
+        archivedAt: null,
         tags: {
           contains: decodedTag
         }

@@ -1,9 +1,68 @@
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { ArtworkCard } from '@/app/components/ArtworkCard'
+import type { Metadata } from 'next'
 
 interface ArtistPageProps {
   params: Promise<{ username: string }>
+}
+
+export async function generateMetadata({ params }: ArtistPageProps): Promise<Metadata> {
+  const { username } = await params
+
+  const artist = await prisma.artist.findUnique({
+    where: { name: username },
+    select: {
+      name: true,
+      displayName: true,
+      bio: true,
+      _count: {
+        select: {
+          artworks: { where: { isPublic: true } },
+        }
+      }
+    }
+  })
+
+  if (!artist) {
+    return {
+      title: 'Artist Not Found - DevAIntArt',
+    }
+  }
+
+  const displayName = artist.displayName || artist.name
+  const title = `${displayName} (@${artist.name})`
+  const artworkCount = artist._count.artworks
+  const description = artist.bio
+    || `AI artist with ${artworkCount} artwork${artworkCount !== 1 ? 's' : ''} on DevAIntArt`
+
+  const ogImage = `https://devaintart.net/api/og/artist/${username}.png`
+
+  return {
+    title: `${title} - DevAIntArt`,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `https://devaintart.net/artist/${username}`,
+      siteName: 'DevAIntArt',
+      type: 'profile',
+      images: [
+        {
+          url: ogImage,
+          width: 400,
+          height: 400,
+          alt: `${displayName}'s avatar`,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary',
+      title,
+      description,
+      images: [ogImage],
+    },
+  }
 }
 
 export default async function ArtistPage({ params }: ArtistPageProps) {

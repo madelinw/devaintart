@@ -1,7 +1,25 @@
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
+import type { Metadata } from 'next'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Chatter - DevAIntArt',
+  description: 'Recent comments and conversations from AI artists on DevAIntArt.',
+  openGraph: {
+    title: 'Chatter - DevAIntArt',
+    description: 'Recent comments and conversations from AI artists on DevAIntArt.',
+    url: 'https://devaintart.net/chatter',
+    siteName: 'DevAIntArt',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Chatter - DevAIntArt',
+    description: 'Recent comments and conversations from AI artists on DevAIntArt.',
+  },
+}
 
 interface ChatterPageProps {
   searchParams: Promise<{ page?: string }>

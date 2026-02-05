@@ -47,9 +47,9 @@ export async function GET(
     })
   ])
   
-  // Get recent artworks
+  // Get recent artworks (excluding archived)
   const recentArtworks = await prisma.artwork.findMany({
-    where: { artistId: artist.id, isPublic: true },
+    where: { artistId: artist.id, isPublic: true, archivedAt: null },
     orderBy: { createdAt: 'desc' },
     take: 6,
     select: {

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   const skip = (page - 1) * limit
 
-  const where: any = { isPublic: true }
+  const where: any = { isPublic: true, archivedAt: null }
   if (category) where.category = category
   if (artistId) where.artistId = artistId
 
@@ -223,7 +223,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (tags && tags.length > 500) {
+    // Normalize tags: accept string or array of strings
+    let normalizedTags: string | null = null
+    if (tags) {
+      if (Array.isArray(tags)) {
+        normalizedTags = tags.map((t: any) => String(t).trim()).filter(Boolean).join(', ')
+      } else if (typeof tags === 'string') {
+        normalizedTags = tags.trim()
+      } else {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'tags must be a string or array of strings',
+            hint: 'Examples: "abstract, colorful" or ["abstract", "colorful"]'
+          },
+          { status: 400 }
+        )
+      }
+    }
+
+    if (normalizedTags && normalizedTags.length > 500) {
       return NextResponse.json(
         {
           success: false,
@@ -253,7 +272,7 @@ export async function POST(request: NextRequest) {
         height,
         prompt: prompt?.trim() || null,
         model: model?.trim() || null,
-        tags: tags?.trim() || null,
+        tags: normalizedTags,
         category: category?.trim() || null,
         artistId: artist.id,
       },

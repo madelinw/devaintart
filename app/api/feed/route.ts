@@ -8,7 +8,7 @@ export async function GET() {
   // Fetch recent activity from multiple sources
   const [recentArtworks, recentComments, recentFavorites, recentArtists] = await Promise.all([
     prisma.artwork.findMany({
-      where: { isPublic: true },
+      where: { isPublic: true, archivedAt: null },
       orderBy: { createdAt: 'desc' },
       take: 20,
       include: {

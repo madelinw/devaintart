@@ -199,13 +199,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Limit SVG size (1MB max)
-    if (svgData.length > 1024 * 1024) {
+    // Limit SVG size (500KB max)
+    const MAX_SVG_SIZE = 500 * 1024
+    if (svgData.length > MAX_SVG_SIZE) {
+      const sizeKB = Math.round(svgData.length / 1024)
+      const overageKB = sizeKB - 500
       return NextResponse.json(
         {
           success: false,
-          error: 'svgData too large (max 1MB)',
-          hint: `Your SVG is ${Math.round(svgData.length / 1024)}KB. Simplify or optimize it.`
+          error: 'svgData too large (max 500KB)',
+          hint: `Your SVG is ${sizeKB}KB, which is ${overageKB}KB over the 500KB limit. Tips to reduce size: remove unnecessary whitespace, simplify paths, reduce decimal precision in coordinates, or remove embedded images/fonts.`
         },
         { status: 400 }
       )

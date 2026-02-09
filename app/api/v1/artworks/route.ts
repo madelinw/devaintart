@@ -1,6 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthenticatedArtist } from '@/lib/auth'
+import { uploadToR2, getArtworkR2Key } from '@/lib/r2'
+import {
+  MAX_SVG_SIZE,
+  MAX_PNG_SIZE,
+  getQuotaInfo,
+  checkAndRecordUpload,
+  formatBytes,
+  QuotaInfo,
+} from '@/lib/quota'
+
+// PNG magic bytes
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+
+function isPngBuffer(buffer: Buffer): boolean {
+  if (buffer.length < 8) return false
+  return buffer.subarray(0, 8).equals(PNG_MAGIC)
+}
 
 // GET /api/v1/artworks - Get artworks feed
 export async function GET(request: NextRequest) {
@@ -71,6 +88,7 @@ export async function GET(request: NextRequest) {
     ...a,
     svgData: a.svgData ? '[SVG data available]' : null,
     hasSvg: !!a.svgData,
+    hasPng: a.contentType === 'png' && !!a.imageUrl,
   }))
 
   return NextResponse.json({
@@ -87,6 +105,8 @@ export async function GET(request: NextRequest) {
 
 // POST /api/v1/artworks - Create new artwork
 export async function POST(request: NextRequest) {
+  let quotaInfo: QuotaInfo | null = null
+
   try {
     const artist = await getAuthenticatedArtist()
 
@@ -104,6 +124,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get current quota info for authenticated response
+    quotaInfo = await getQuotaInfo(artist.id)
+
     let body
     try {
       body = await request.json()
@@ -113,20 +136,22 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: 'Invalid JSON body',
-          hint: 'Request body must be valid JSON with Content-Type: application/json'
+          hint: 'Request body must be valid JSON with Content-Type: application/json',
+          quota: quotaInfo,
         },
         { status: 400 }
       )
     }
 
-    const { title, description, svgData, prompt, model, tags, category } = body
+    const { title, description, svgData, pngData, prompt, model, tags, category } = body
 
     if (!title) {
       return NextResponse.json(
         {
           success: false,
           error: 'title is required',
-          hint: 'Every artwork needs a title. Example: {"title": "My Art", "svgData": "<svg>...</svg>"}'
+          hint: 'Every artwork needs a title. Example: {"title": "My Art", "svgData": "<svg>...</svg>"}',
+          quota: quotaInfo,
         },
         { status: 400 }
       )
@@ -137,7 +162,8 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: 'title must be a non-empty string',
-          hint: 'Provide a meaningful title for your artwork'
+          hint: 'Provide a meaningful title for your artwork',
+          quota: quotaInfo,
         },
         { status: 400 }
       )
@@ -148,67 +174,33 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: 'title must be 200 characters or less',
-          hint: `Your title is ${title.length} characters. Please shorten it.`
+          hint: `Your title is ${title.length} characters. Please shorten it.`,
+          quota: quotaInfo,
         },
         { status: 400 }
       )
     }
 
-    if (!svgData) {
+    // Must have either svgData or pngData, but not both
+    if (!svgData && !pngData) {
       return NextResponse.json(
         {
           success: false,
-          error: 'svgData is required',
-          hint: 'Provide your SVG artwork as a string. Example: {"title": "My Art", "svgData": "<svg viewBox=\\"0 0 100 100\\">...</svg>"}'
+          error: 'Either svgData or pngData is required',
+          hint: 'Provide svgData (SVG string, max 500KB) or pngData (base64-encoded PNG, max 15MB)',
+          quota: quotaInfo,
         },
         { status: 400 }
       )
     }
 
-    if (typeof svgData !== 'string') {
+    if (svgData && pngData) {
       return NextResponse.json(
         {
           success: false,
-          error: 'svgData must be a string',
-          hint: 'SVG content should be a string, not an object or array'
-        },
-        { status: 400 }
-      )
-    }
-
-    // Validate SVG - must start with <svg
-    if (!svgData.trim().toLowerCase().startsWith('<svg')) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'svgData must be valid SVG',
-          hint: 'SVG must start with <svg tag. Example: <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">...</svg>'
-        },
-        { status: 400 }
-      )
-    }
-
-    if (!svgData.includes('</svg>')) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'svgData must contain closing </svg> tag',
-          hint: 'Make sure your SVG is complete and properly closed'
-        },
-        { status: 400 }
-      )
-    }
-
-    // Limit SVG size (500KB max)
-    const MAX_SVG_SIZE = 500 * 1024
-    if (svgData.length > MAX_SVG_SIZE) {
-      const sizeKB = Math.round(svgData.length / 1024)
-      const overageKB = sizeKB - 500
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'svgData too large (max 500KB)',
-          hint: `Your SVG is ${sizeKB}KB, which is ${overageKB}KB over the 500KB limit. Tips to reduce size: remove unnecessary whitespace, simplify paths, reduce decimal precision in coordinates, or remove embedded images/fonts.`
+          error: 'Cannot provide both svgData and pngData',
+          hint: 'Choose one format: svgData for SVG artwork or pngData for PNG images',
+          quota: quotaInfo,
         },
         { status: 400 }
       )
@@ -220,7 +212,8 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: 'description must be 2000 characters or less',
-          hint: `Your description is ${description.length} characters.`
+          hint: `Your description is ${description.length} characters.`,
+          quota: quotaInfo,
         },
         { status: 400 }
       )
@@ -238,7 +231,8 @@ export async function POST(request: NextRequest) {
           {
             success: false,
             error: 'tags must be a string or array of strings',
-            hint: 'Examples: "abstract, colorful" or ["abstract", "colorful"]'
+            hint: 'Examples: "abstract, colorful" or ["abstract", "colorful"]',
+            quota: quotaInfo,
           },
           { status: 400 }
         )
@@ -250,27 +244,231 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: 'tags must be 500 characters or less',
-          hint: 'Use comma-separated tags. Example: "abstract, colorful, geometric"'
+          hint: 'Use comma-separated tags. Example: "abstract, colorful, geometric"',
+          quota: quotaInfo,
         },
         { status: 400 }
       )
     }
 
-    // Extract dimensions from SVG if present
+    // Variables for artwork creation
+    let contentType: 'svg' | 'png' = 'svg'
+    let storedSvgData: string | null = null
+    let imageUrl: string | null = null
+    let r2Key: string | null = null
+    let fileSize: number = 0
     let width: number | null = null
     let height: number | null = null
-    const viewBoxMatch = svgData.match(/viewBox=["'](\d+)\s+(\d+)\s+(\d+)\s+(\d+)["']/)
-    if (viewBoxMatch) {
-      width = parseInt(viewBoxMatch[3])
-      height = parseInt(viewBoxMatch[4])
+
+    if (svgData) {
+      // SVG validation
+      if (typeof svgData !== 'string') {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'svgData must be a string',
+            hint: 'SVG content should be a string, not an object or array',
+            quota: quotaInfo,
+          },
+          { status: 400 }
+        )
+      }
+
+      // Validate SVG - must start with <svg
+      if (!svgData.trim().toLowerCase().startsWith('<svg')) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'svgData must be valid SVG',
+            hint: 'SVG must start with <svg tag. Example: <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">...</svg>',
+            quota: quotaInfo,
+          },
+          { status: 400 }
+        )
+      }
+
+      if (!svgData.includes('</svg>')) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'svgData must contain closing </svg> tag',
+            hint: 'Make sure your SVG is complete and properly closed',
+            quota: quotaInfo,
+          },
+          { status: 400 }
+        )
+      }
+
+      // Check SVG size
+      fileSize = Buffer.byteLength(svgData, 'utf8')
+      if (fileSize > MAX_SVG_SIZE) {
+        const sizeKB = Math.round(fileSize / 1024)
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'svgData too large (max 500KB)',
+            hint: `Your SVG is ${sizeKB}KB. For larger artwork, use pngData instead (up to 15MB). Tips: simplify paths, reduce decimal precision.`,
+            quota: quotaInfo,
+          },
+          { status: 400 }
+        )
+      }
+
+      // Extract dimensions from SVG if present
+      const viewBoxMatch = svgData.match(/viewBox=["'](\d+)\s+(\d+)\s+(\d+)\s+(\d+)["']/)
+      if (viewBoxMatch) {
+        width = parseInt(viewBoxMatch[3])
+        height = parseInt(viewBoxMatch[4])
+      }
+
+      contentType = 'svg'
+      storedSvgData = svgData
+    } else if (pngData) {
+      // PNG validation
+      if (typeof pngData !== 'string') {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'pngData must be a base64-encoded string',
+            hint: 'Encode your PNG file as base64 and provide it as a string',
+            quota: quotaInfo,
+          },
+          { status: 400 }
+        )
+      }
+
+      // Decode base64
+      let pngBuffer: Buffer
+      try {
+        // Handle data URLs (data:image/png;base64,...) or raw base64
+        let base64Data = pngData
+        if (pngData.startsWith('data:')) {
+          const match = pngData.match(/^data:image\/png;base64,(.+)$/)
+          if (!match) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: 'Invalid data URL format',
+                hint: 'Use format: data:image/png;base64,... or provide raw base64 string',
+                quota: quotaInfo,
+              },
+              { status: 400 }
+            )
+          }
+          base64Data = match[1]
+        }
+        pngBuffer = Buffer.from(base64Data, 'base64')
+      } catch {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Invalid base64 encoding',
+            hint: 'pngData must be valid base64-encoded PNG data',
+            quota: quotaInfo,
+          },
+          { status: 400 }
+        )
+      }
+
+      // Check PNG magic bytes
+      if (!isPngBuffer(pngBuffer)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'pngData is not a valid PNG image',
+            hint: 'The decoded data does not have valid PNG magic bytes. Make sure you are encoding a PNG file.',
+            quota: quotaInfo,
+          },
+          { status: 400 }
+        )
+      }
+
+      fileSize = pngBuffer.length
+
+      // Check PNG size
+      if (fileSize > MAX_PNG_SIZE) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `pngData too large (max ${formatBytes(MAX_PNG_SIZE)})`,
+            hint: `Your PNG is ${formatBytes(fileSize)}. Reduce image resolution or quality.`,
+            quota: quotaInfo,
+          },
+          { status: 400 }
+        )
+      }
+
+      // Check quota before uploading
+      try {
+        quotaInfo = await checkAndRecordUpload(artist.id, fileSize)
+      } catch (err: any) {
+        if (err.type === 'QUOTA_EXCEEDED') {
+          return NextResponse.json(
+            {
+              success: false,
+              error: err.message,
+              hint: err.hint,
+              quota: err.quotaInfo,
+            },
+            { status: 429 }
+          )
+        }
+        throw err
+      }
+
+      // Generate a temporary ID for the R2 key (we'll create the artwork first, then upload)
+      // Actually, we need the artwork ID before uploading, so we'll create artwork first
+      // then upload, then update. Or use a UUID for the key.
+      const artworkIdForR2 = `${Date.now()}-${Math.random().toString(36).substring(2, 10)}`
+      r2Key = getArtworkR2Key(artist.id, artworkIdForR2)
+
+      try {
+        imageUrl = await uploadToR2(r2Key, pngBuffer)
+      } catch (err) {
+        console.error('[ERROR] R2 upload failed:', err)
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Failed to upload PNG to storage',
+            hint: 'This is a server error. Please try again or report at https://github.com/anthropics/claude-code/issues',
+            quota: quotaInfo,
+          },
+          { status: 500 }
+        )
+      }
+
+      contentType = 'png'
+    }
+
+    // For SVG, also check quota (but after validation)
+    if (contentType === 'svg') {
+      try {
+        quotaInfo = await checkAndRecordUpload(artist.id, fileSize)
+      } catch (err: any) {
+        if (err.type === 'QUOTA_EXCEEDED') {
+          return NextResponse.json(
+            {
+              success: false,
+              error: err.message,
+              hint: err.hint,
+              quota: err.quotaInfo,
+            },
+            { status: 429 }
+          )
+        }
+        throw err
+      }
     }
 
     const artwork = await prisma.artwork.create({
       data: {
         title: title.trim(),
         description: description?.trim() || null,
-        svgData,
-        contentType: 'svg',
+        svgData: storedSvgData,
+        imageUrl,
+        r2Key,
+        fileSize,
+        contentType,
         width,
         height,
         prompt: prompt?.trim() || null,
@@ -298,17 +496,19 @@ export async function POST(request: NextRequest) {
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://devaintart.net'
 
-    console.log(`[ARTWORK] "${artwork.title}" created by ${artist.name} (${artwork.id})`)
+    console.log(`[ARTWORK] "${artwork.title}" (${contentType}) created by ${artist.name} (${artwork.id})`)
 
     return NextResponse.json({
       success: true,
-      message: 'Artwork created successfully! 🎨',
+      message: 'Artwork created successfully!',
       artwork: {
         id: artwork.id,
         title: artwork.title,
+        contentType: artwork.contentType,
         viewUrl: `${baseUrl}/artwork/${artwork.id}`,
         ogImage: `${baseUrl}/api/og/${artwork.id}.png`,
-      }
+      },
+      quota: quotaInfo,
     }, { status: 201 })
 
   } catch (error) {
@@ -317,7 +517,8 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: 'Failed to create artwork',
-        hint: 'This is a server error. Please try again or report at https://github.com/anthropics/claude-code/issues'
+        hint: 'This is a server error. Please try again or report at https://github.com/anthropics/claude-code/issues',
+        quota: quotaInfo,
       },
       { status: 500 }
     )

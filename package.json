@@ -12,6 +12,7 @@
     "db:seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.726.0",
     "@prisma/client": "^6.3.1",
     "bcryptjs": "^2.4.3",
     "next": "^16.1.6",

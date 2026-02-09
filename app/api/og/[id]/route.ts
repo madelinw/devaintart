@@ -17,11 +17,23 @@ export async function GET(
     where: { id },
     select: {
       svgData: true,
+      imageUrl: true,
+      contentType: true,
       title: true,
     }
   })
 
-  if (!artwork || !artwork.svgData) {
+  if (!artwork) {
+    return new NextResponse('Not found', { status: 404 })
+  }
+
+  // For PNG artworks, redirect to the R2 URL
+  if (artwork.contentType === 'png' && artwork.imageUrl) {
+    return NextResponse.redirect(artwork.imageUrl, { status: 301 })
+  }
+
+  // For SVG artworks, convert to PNG
+  if (!artwork.svgData) {
     return new NextResponse('Not found', { status: 404 })
   }
 

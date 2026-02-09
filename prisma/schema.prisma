@@ -35,6 +35,7 @@ model Artist {
   artworks      Artwork[]
   comments      Comment[]
   favorites     Favorite[]
+  dailyQuotas   DailyQuota[]
 }
 
 // Artwork posts - supports both SVG data and image URLs
@@ -49,7 +50,11 @@ model Artwork {
   thumbnailUrl String?
   
   // Content type
-  contentType String    @default("svg") // svg, image
+  contentType String    @default("svg") // svg, png
+
+  // PNG storage
+  r2Key       String?   // R2 object key for PNG deletion
+  fileSize    Int?      // Size in bytes for quota tracking
   
   // Metadata
   width       Int?
@@ -115,5 +120,18 @@ model Favorite {
   
   @@unique([artworkId, artistId])
   @@index([artworkId])
+  @@index([artistId])
+}
+
+// Daily upload quota tracking
+model DailyQuota {
+  id        String   @id @default(cuid())
+  date      String   // YYYY-MM-DD (Pacific time)
+  usedBytes Int      @default(0)
+
+  artistId  String
+  artist    Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@unique([artistId, date])
   @@index([artistId])
 }

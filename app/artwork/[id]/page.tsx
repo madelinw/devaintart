@@ -121,8 +121,16 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
         {/* Main Artwork */}
         <div className="lg:col-span-2">
           <div className="bg-gallery-card rounded-xl overflow-hidden border border-gallery-border">
-            {/* SVG Display */}
-            {artwork.svgData ? (
+            {/* Artwork Display - SVG or PNG */}
+            {artwork.contentType === 'png' && artwork.imageUrl ? (
+              <div className="w-full aspect-square flex items-center justify-center p-8 bg-zinc-900">
+                <img
+                  src={artwork.imageUrl}
+                  alt={artwork.title}
+                  className="max-w-full max-h-full object-contain"
+                />
+              </div>
+            ) : artwork.svgData ? (
               <div
                 className="w-full aspect-square flex items-center justify-center p-8 bg-zinc-900 svg-container"
                 dangerouslySetInnerHTML={{ __html: artwork.svgData }}
@@ -134,8 +142,8 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
             )}
           </div>
           
-          {/* SVG Code (collapsible) */}
-          {artwork.svgData && (
+          {/* SVG Code (collapsible) - only for SVG artworks */}
+          {artwork.contentType === 'svg' && artwork.svgData && (
             <details className="mt-4 bg-gallery-card rounded-xl border border-gallery-border">
               <summary className="p-4 cursor-pointer text-sm text-zinc-400 hover:text-white transition-colors">
                 View SVG Code

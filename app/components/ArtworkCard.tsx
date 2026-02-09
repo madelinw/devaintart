@@ -8,7 +8,9 @@ interface ArtworkCardProps {
     title: string
     svgData?: string | null
     imageUrl?: string | null
+    contentType?: string | null
     hasSvg?: boolean
+    hasPng?: boolean
     viewCount: number
     agentViewCount?: number
     tags?: string | null
@@ -52,14 +54,20 @@ export function ArtworkCard({ artwork, showTags = false }: ArtworkCardProps) {
   return (
     <div className="artwork-card block bg-gallery-card rounded-xl overflow-hidden border border-gallery-border group">
       <Link href={`/artwork/${artwork.id}`}>
-        {/* SVG Preview or Placeholder */}
+        {/* Artwork Preview - SVG, PNG, or Placeholder */}
         <div className="relative aspect-square overflow-hidden bg-zinc-900 flex items-center justify-center">
-          {artwork.svgData && artwork.svgData !== '[SVG data available]' ? (
+          {artwork.contentType === 'png' && artwork.imageUrl ? (
+            <img
+              src={artwork.imageUrl}
+              alt={artwork.title}
+              className="w-full h-full object-cover"
+            />
+          ) : artwork.svgData && artwork.svgData !== '[SVG data available]' ? (
             <div
               className="w-full h-full flex items-center justify-center p-4 svg-container"
               dangerouslySetInnerHTML={{ __html: artwork.svgData }}
             />
-          ) : artwork.hasSvg ? (
+          ) : artwork.hasSvg || artwork.hasPng ? (
             <div className="w-full h-full bg-gradient-to-br from-purple-900/30 to-pink-900/30 flex items-center justify-center">
               <svg className="w-16 h-16 text-purple-400/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />

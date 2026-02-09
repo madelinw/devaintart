@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthenticatedArtist } from '@/lib/auth'
+import { deleteFromR2 } from '@/lib/r2'
+import { getQuotaInfo } from '@/lib/quota'
 
 // GET /api/v1/artworks/[id] - Get single artwork with full SVG data
 export async function GET(
@@ -101,6 +103,7 @@ export async function DELETE(
       title: true,
       artistId: true,
       archivedAt: true,
+      r2Key: true,
       artist: {
         select: { name: true }
       }
@@ -141,6 +144,17 @@ export async function DELETE(
     )
   }
 
+  // Delete R2 object if this is a PNG artwork
+  if (artwork.r2Key) {
+    try {
+      await deleteFromR2(artwork.r2Key)
+      console.log(`[R2] Deleted object ${artwork.r2Key}`)
+    } catch (err) {
+      console.error(`[R2] Failed to delete object ${artwork.r2Key}:`, err)
+      // Continue with archiving even if R2 deletion fails
+    }
+  }
+
   // Archive the artwork (hide from feeds but keep data)
   await prisma.artwork.update({
     where: { id },
@@ -149,11 +163,15 @@ export async function DELETE(
 
   console.log(`[ARCHIVE] "${artwork.title}" archived by ${artist.name}`)
 
+  // Get quota info for response
+  const quotaInfo = await getQuotaInfo(artist.id)
+
   return NextResponse.json({
     success: true,
     message: `Artwork "${artwork.title}" has been archived`,
     archivedId: id,
-    hint: 'Use PATCH /api/v1/artworks/:id with {"archived": false} to unarchive'
+    hint: 'Use PATCH /api/v1/artworks/:id with {"archived": false} to unarchive',
+    quota: quotaInfo,
   })
 }
 

@@ -116,14 +116,14 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
   const displayName = artwork.artist.displayName || artwork.artist.name
   
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="grid lg:grid-cols-3 gap-8">
+    <div className="max-w-screen-2xl mx-auto px-6 lg:px-12">
+      <div className="grid lg:grid-cols-3 gap-8 lg:gap-12">
         {/* Main Artwork */}
         <div className="lg:col-span-2">
           <div className="bg-gallery-card rounded-xl overflow-hidden border border-gallery-border">
             {/* Artwork Display - SVG or PNG */}
             {artwork.contentType === 'png' && artwork.imageUrl ? (
-              <div className="w-full aspect-square flex items-center justify-center p-8 bg-zinc-900">
+              <div className="w-full min-h-[550px] lg:min-h-[700px] flex items-center justify-center p-10 bg-zinc-900">
                 <img
                   src={artwork.imageUrl}
                   alt={artwork.title}
@@ -132,7 +132,7 @@ export default async function ArtworkPage({ params }: ArtworkPageProps) {
               </div>
             ) : artwork.svgData ? (
               <div
-                className="w-full aspect-square flex items-center justify-center p-8 bg-zinc-900 svg-container"
+                className="w-full min-h-[550px] lg:min-h-[700px] flex items-center justify-center p-10 bg-zinc-900 svg-container"
                 dangerouslySetInnerHTML={{ __html: artwork.svgData }}
               />
             ) : (

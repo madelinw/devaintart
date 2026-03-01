@@ -1,6 +1,17 @@
 import { prisma } from '@/lib/prisma'
 import sharp from 'sharp'
 import { NextRequest, NextResponse } from 'next/server'
+import { downloadFromR2, getOgR2Key, objectExistsInR2, uploadToR2 } from '@/lib/r2'
+
+function logOg(event: string, details: Record<string, unknown>) {
+  console.log(
+    `[OG] ${JSON.stringify({
+      event,
+      ts: new Date().toISOString(),
+      ...details,
+    })}`
+  )
+}
 
 export async function GET(
   request: NextRequest,
@@ -16,10 +27,12 @@ export async function GET(
   const artwork = await prisma.artwork.findUnique({
     where: { id },
     select: {
+      id: true,
       svgData: true,
       imageUrl: true,
       contentType: true,
       title: true,
+      updatedAt: true,
     }
   })
 
@@ -29,12 +42,52 @@ export async function GET(
 
   // For PNG artworks, redirect to the R2 URL
   if (artwork.contentType === 'png' && artwork.imageUrl) {
-    return NextResponse.redirect(artwork.imageUrl, { status: 301 })
+    try {
+      const resp = await fetch(artwork.imageUrl)
+      if (!resp.ok) {
+        return new NextResponse('Not found', { status: 404 })
+      }
+      const buffer = Buffer.from(await resp.arrayBuffer())
+      return new NextResponse(new Uint8Array(buffer), {
+        headers: {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      })
+    } catch {
+      return new NextResponse('Not found', { status: 404 })
+    }
   }
 
   // For SVG artworks, convert to PNG
   if (!artwork.svgData) {
     return new NextResponse('Not found', { status: 404 })
+  }
+
+  const cacheKey = getOgR2Key(artwork.id, artwork.updatedAt.getTime())
+
+  try {
+    const exists = await objectExistsInR2(cacheKey)
+    if (exists) {
+      try {
+        const cachedBuffer = await downloadFromR2(cacheKey)
+        logOg('cache_hit', { artworkId: artwork.id, cacheKey, bytes: cachedBuffer.length })
+        return new NextResponse(new Uint8Array(cachedBuffer), {
+          headers: {
+            'Content-Type': 'image/png',
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        })
+      } catch (error) {
+        console.error('OG cache read failed, falling back to render:', error)
+        logOg('cache_read_error', { artworkId: artwork.id, cacheKey })
+      }
+    } else {
+      logOg('cache_miss', { artworkId: artwork.id, cacheKey })
+    }
+  } catch (error) {
+    console.error('OG cache lookup failed, falling back to render:', error)
+    logOg('cache_lookup_error', { artworkId: artwork.id, cacheKey })
   }
 
   try {
@@ -62,14 +115,33 @@ export async function GET(
       .png()
       .toBuffer()
 
-    return new NextResponse(new Uint8Array(pngBuffer), {
-      headers: {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=31536000, immutable',
-      },
-    })
+    try {
+      await uploadToR2(cacheKey, pngBuffer)
+      logOg('rendered_cached', {
+        artworkId: artwork.id,
+        cacheKey,
+        bytes: pngBuffer.length,
+      })
+      return new NextResponse(new Uint8Array(pngBuffer), {
+        headers: {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      })
+    } catch (error) {
+      // Fall back to direct response if cache upload fails.
+      console.error('OG cache upload failed, returning direct image:', error)
+      logOg('cache_upload_error', { artworkId: artwork.id, cacheKey })
+      return new NextResponse(new Uint8Array(pngBuffer), {
+        headers: {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=3600',
+        },
+      })
+    }
   } catch (error) {
     console.error('Error rendering SVG to PNG:', error)
+    logOg('render_error', { artworkId: artwork.id, cacheKey })
     return new NextResponse('Error rendering image', { status: 500 })
   }
 }

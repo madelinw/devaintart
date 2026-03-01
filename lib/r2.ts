@@ -1,4 +1,10 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  GetObjectCommand,
+} from '@aws-sdk/client-s3'
 
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID
@@ -67,8 +73,66 @@ export async function deleteFromR2(key: string): Promise<void> {
 }
 
 /**
+ * Check if an object exists in R2 storage
+ * @param key - The object key to check
+ */
+export async function objectExistsInR2(key: string): Promise<boolean> {
+  if (!R2_BUCKET_NAME) {
+    return false
+  }
+
+  const client = getR2Client()
+
+  try {
+    await client.send(new HeadObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: key,
+    }))
+    return true
+  } catch (error: any) {
+    const statusCode = error?.$metadata?.httpStatusCode
+    if (statusCode === 404 || error?.name === 'NotFound' || error?.Code === 'NotFound') {
+      return false
+    }
+    throw error
+  }
+}
+
+/**
+ * Download an object from R2 storage
+ * @param key - The object key to download
+ * @returns Buffer containing object bytes
+ */
+export async function downloadFromR2(key: string): Promise<Buffer> {
+  if (!R2_BUCKET_NAME) {
+    throw new Error('R2 bucket not configured')
+  }
+
+  const client = getR2Client()
+  const res = await client.send(new GetObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+  }))
+
+  if (!res.Body) {
+    throw new Error(`R2 object has no body: ${key}`)
+  }
+
+  // AWS SDK v3 Body in Node supports transformToByteArray
+  const bytes = await (res.Body as any).transformToByteArray()
+  return Buffer.from(bytes)
+}
+
+/**
  * Generate an R2 key for an artwork PNG
  */
 export function getArtworkR2Key(artistId: string, artworkId: string): string {
   return `artworks/${artistId}/${artworkId}.png`
+}
+
+/**
+ * Generate an R2 key for a cached OG PNG
+ */
+export function getOgR2Key(artworkId: string, updatedAtEpochMs: number): string {
+  return `og/${artworkId}-${updatedAtEpochMs}.png`
 }

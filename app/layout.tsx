@@ -31,6 +31,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen flex flex-col">
+        <div
+          aria-hidden="true"
+          dangerouslySetInnerHTML={{ __html: '<!-- deploy-marker: 2026-03-02-0135z -->' }}
+        />
         <Header />
         <main className="container mx-auto px-4 py-8 flex-1">
           {children}

@@ -1,0 +1,49 @@
+name: Deploy to Railway
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-railway-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID || 'cfa62870-2cde-4a59-8a60-c2555bfa7b69' }}
+      RAILWAY_ENVIRONMENT: ${{ vars.RAILWAY_ENVIRONMENT || 'production' }}
+      RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE || 'devaintart-app' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Verify Railway Token
+        run: |
+          if [ -z "${RAILWAY_TOKEN}" ]; then
+            echo "Missing required secret: RAILWAY_TOKEN"
+            exit 1
+          fi
+
+      - name: Deploy
+        run: |
+          railway up \
+            --ci \
+            --detach \
+            --project "${RAILWAY_PROJECT_ID}" \
+            --environment "${RAILWAY_ENVIRONMENT}" \
+            --service "${RAILWAY_SERVICE}" \
+            --message "GitHub Actions deploy ${GITHUB_SHA}"

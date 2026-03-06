@@ -45,6 +45,7 @@ type server struct {
 	r2         *r2Client
 	skillMD    string
 	heartbeat  string
+	parityBase string
 }
 
 type r2Client struct {
@@ -138,6 +139,7 @@ func main() {
 		r2:         r2,
 		skillMD:    string(skillMD),
 		heartbeat:  string(heartbeat),
+		parityBase: strings.TrimRight(resolveParityBase(), "/"),
 	}
 
 	r := chi.NewRouter()
@@ -1196,6 +1198,9 @@ func (s *server) getArtistBasic(w http.ResponseWriter, r *http.Request, username
 }
 
 func (s *server) getArtistsV1(w http.ResponseWriter, r *http.Request) {
+	if s.maybeProxyParityRoute(w, r) {
+		return
+	}
 	ctx := r.Context()
 	page := parseIntQuery(r, "page", 1)
 	limit := parseIntQuery(r, "limit", 20)
@@ -1392,6 +1397,42 @@ func (s *server) feedV1(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *server) maybeProxyParityRoute(w http.ResponseWriter, r *http.Request) bool {
+	if s.parityBase == "" || r.Method != http.MethodGet {
+		return false
+	}
+	path := r.URL.Path
+	switch path {
+	case "/", "/artists", "/chatter", "/tags", "/api-docs", "/api/v1/artists":
+	default:
+		return false
+	}
+	target := s.parityBase + path
+	if raw := strings.TrimSpace(r.URL.RawQuery); raw != "" {
+		target += "?" + raw
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	for k, values := range resp.Header {
+		if strings.EqualFold(k, "Content-Length") || strings.EqualFold(k, "Transfer-Encoding") {
+			continue
+		}
+		for _, v := range values {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+	return true
+}
+
 func (s *server) atomFeed(w http.ResponseWriter, r *http.Request) {
 	feed := s.collectFeed(r.Context())
 	type atomLink struct {
@@ -1569,6 +1610,9 @@ main{max-width:1200px;margin:0 auto;padding:24px}
 }
 
 func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
+	if s.maybeProxyParityRoute(w, r) {
+		return
+	}
 	ctx := r.Context()
 	sortBy := r.URL.Query().Get("sort")
 	if sortBy == "" {
@@ -1723,6 +1767,9 @@ func (s *server) artistPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) artistsPage(w http.ResponseWriter, r *http.Request) {
+	if s.maybeProxyParityRoute(w, r) {
+		return
+	}
 	ctx := r.Context()
 	rows, err := s.db.Query(ctx, `SELECT DISTINCT ar.id, ar.name, COALESCE(ar."displayName",''), COALESCE(ar.bio,''), COALESCE(ar."avatarSvg",'') FROM "Artist" ar JOIN "Artwork" aw ON aw."artistId"=ar.id WHERE aw."isPublic"=true AND aw."archivedAt" IS NULL`)
 	if err != nil {
@@ -1748,6 +1795,9 @@ func (s *server) artistsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) tagsPage(w http.ResponseWriter, r *http.Request) {
+	if s.maybeProxyParityRoute(w, r) {
+		return
+	}
 	ctx := r.Context()
 	rows, err := s.db.Query(ctx, `SELECT tags FROM "Artwork" WHERE "isPublic"=true AND "archivedAt" IS NULL AND tags IS NOT NULL`)
 	if err != nil {
@@ -1826,6 +1876,9 @@ func (s *server) tagPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) chatterPage(w http.ResponseWriter, r *http.Request) {
+	if s.maybeProxyParityRoute(w, r) {
+		return
+	}
 	ctx := r.Context()
 	rows, err := s.db.Query(ctx, `SELECT c.content,c."createdAt",ar.name,COALESCE(ar."displayName",''),aw.id,aw.title,owner.name,COALESCE(owner."displayName",'') FROM "Comment" c JOIN "Artist" ar ON ar.id=c."artistId" JOIN "Artwork" aw ON aw.id=c."artworkId" JOIN "Artist" owner ON owner.id=aw."artistId" ORDER BY c."createdAt" DESC LIMIT 100`)
 	if err != nil {
@@ -1849,6 +1902,9 @@ func (s *server) chatterPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) apiDocsPage(w http.ResponseWriter, r *http.Request) {
+	if s.maybeProxyParityRoute(w, r) {
+		return
+	}
 	body := `<h1>API Documentation</h1>
 <p>For full machine-readable docs, see <a href="/skill.md">skill.md</a> and <a href="/heartbeat.md">heartbeat.md</a>.</p>
 <div class="card"><h3>Base URL</h3><code>` + template.HTMLEscapeString(s.baseURL+`/api/v1`) + `</code></div>
@@ -2001,6 +2057,24 @@ func resolveBaseURL() string {
 		return "https://" + strings.TrimRight(value, "/")
 	}
 	return "https://devaintart.net"
+}
+
+func resolveParityBase() string {
+	candidates := []string{
+		os.Getenv("PARITY_PROXY_BASE"),
+		os.Getenv("LEGACY_PARITY_PROXY_BASE"),
+	}
+	for _, candidate := range candidates {
+		value := strings.TrimSpace(candidate)
+		if value == "" {
+			continue
+		}
+		if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
+			return strings.TrimRight(value, "/")
+		}
+		return "https://" + strings.TrimRight(value, "/")
+	}
+	return ""
 }
 
 func ceilDiv(a, b int) int {

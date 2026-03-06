@@ -44,6 +44,7 @@ type server struct {
 	r2         *r2Client
 	skillMD    string
 	heartbeat  string
+	legacyHTML string
 }
 
 type r2Client struct {
@@ -140,17 +141,18 @@ func main() {
 		r2:         r2,
 		skillMD:    string(skillMD),
 		heartbeat:  string(heartbeat),
+		legacyHTML: strings.TrimRight(coalesce(os.Getenv("LEGACY_HTML_ORIGIN"), "https://devaintart.net"), "/"),
 	}
 
 	r := chi.NewRouter()
-	r.Get("/", s.homePage)
-	r.Get("/artists", s.artistsPage)
-	r.Get("/artist/{username}", s.artistPage)
-	r.Get("/artwork/{id}", s.artworkPage)
-	r.Get("/tags", s.tagsPage)
-	r.Get("/tag/{tag}", s.tagPage)
-	r.Get("/chatter", s.chatterPage)
-	r.Get("/api-docs", s.apiDocsPage)
+	r.Get("/", s.proxyLegacy)
+	r.Get("/artists", s.proxyLegacy)
+	r.Get("/artist/{username}", s.proxyLegacy)
+	r.Get("/artwork/{id}", s.proxyLegacy)
+	r.Get("/tags", s.proxyLegacy)
+	r.Get("/tag/{tag}", s.proxyLegacy)
+	r.Get("/chatter", s.proxyLegacy)
+	r.Get("/api-docs", s.proxyLegacy)
 
 	r.Get("/skill.md", s.skillMarkdown)
 	r.Get("/heartbeat.md", s.heartbeatMarkdown)
@@ -185,6 +187,7 @@ func main() {
 			r.Get("/feed", s.feedV1)
 		})
 	})
+	r.Get("/*", s.proxyLegacy)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -224,6 +227,37 @@ func (s *server) json(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (s *server) proxyLegacy(w http.ResponseWriter, r *http.Request) {
+	target := s.legacyHTML + r.URL.RequestURI()
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, target, nil)
+	if err != nil {
+		http.Error(w, "proxy request build failed", http.StatusInternalServerError)
+		return
+	}
+	for _, h := range []string{"Accept", "Accept-Language", "User-Agent", "Cookie", "Referer"} {
+		if v := r.Header.Get(h); v != "" {
+			req.Header.Set(h, v)
+		}
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		http.Error(w, "legacy proxy unavailable", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	for k, vals := range resp.Header {
+		kl := strings.ToLower(k)
+		if kl == "connection" || kl == "transfer-encoding" || kl == "keep-alive" || kl == "proxy-authenticate" || kl == "proxy-authorization" || kl == "te" || kl == "trailers" || kl == "upgrade" {
+			continue
+		}
+		for _, v := range vals {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
 }
 
 func parseIntQuery(r *http.Request, key string, def int) int {

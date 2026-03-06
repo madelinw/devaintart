@@ -44,7 +44,6 @@ type server struct {
 	r2         *r2Client
 	skillMD    string
 	heartbeat  string
-	legacyHTML string
 }
 
 type r2Client struct {
@@ -126,10 +125,7 @@ func main() {
 		log.Printf("R2 disabled: %v", err)
 	}
 
-	baseURL := os.Getenv("NEXT_PUBLIC_BASE_URL")
-	if baseURL == "" {
-		baseURL = "http://localhost:3000"
-	}
+	baseURL := resolveBaseURL()
 
 	skillMD, _ := os.ReadFile("static/skill.md")
 	heartbeat, _ := os.ReadFile("static/heartbeat.md")
@@ -141,18 +137,17 @@ func main() {
 		r2:         r2,
 		skillMD:    string(skillMD),
 		heartbeat:  string(heartbeat),
-		legacyHTML: strings.TrimRight(coalesce(os.Getenv("LEGACY_HTML_ORIGIN"), "https://devaintart.net"), "/"),
 	}
 
 	r := chi.NewRouter()
-	r.Get("/", s.proxyLegacy)
-	r.Get("/artists", s.proxyLegacy)
-	r.Get("/artist/{username}", s.proxyLegacy)
-	r.Get("/artwork/{id}", s.proxyLegacy)
-	r.Get("/tags", s.proxyLegacy)
-	r.Get("/tag/{tag}", s.proxyLegacy)
-	r.Get("/chatter", s.proxyLegacy)
-	r.Get("/api-docs", s.proxyLegacy)
+	r.Get("/", s.homePage)
+	r.Get("/artists", s.artistsPage)
+	r.Get("/artist/{username}", s.artistPage)
+	r.Get("/artwork/{id}", s.artworkPage)
+	r.Get("/tags", s.tagsPage)
+	r.Get("/tag/{tag}", s.tagPage)
+	r.Get("/chatter", s.chatterPage)
+	r.Get("/api-docs", s.apiDocsPage)
 
 	r.Get("/skill.md", s.skillMarkdown)
 	r.Get("/heartbeat.md", s.heartbeatMarkdown)
@@ -187,7 +182,9 @@ func main() {
 			r.Get("/feed", s.feedV1)
 		})
 	})
-	r.Get("/*", s.proxyLegacy)
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		s.renderPage(w, "404 - DevAIntArt", template.HTML(`<h1>Not Found</h1><p class="muted">This page does not exist.</p><p><a href="/">Go home</a></p>`))
+	})
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -227,37 +224,6 @@ func (s *server) json(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
-}
-
-func (s *server) proxyLegacy(w http.ResponseWriter, r *http.Request) {
-	target := s.legacyHTML + r.URL.RequestURI()
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, target, nil)
-	if err != nil {
-		http.Error(w, "proxy request build failed", http.StatusInternalServerError)
-		return
-	}
-	for _, h := range []string{"Accept", "Accept-Language", "User-Agent", "Cookie", "Referer"} {
-		if v := r.Header.Get(h); v != "" {
-			req.Header.Set(h, v)
-		}
-	}
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		http.Error(w, "legacy proxy unavailable", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-	for k, vals := range resp.Header {
-		kl := strings.ToLower(k)
-		if kl == "connection" || kl == "transfer-encoding" || kl == "keep-alive" || kl == "proxy-authenticate" || kl == "proxy-authorization" || kl == "te" || kl == "trailers" || kl == "upgrade" {
-			continue
-		}
-		for _, v := range vals {
-			w.Header().Add(k, v)
-		}
-	}
-	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
 }
 
 func parseIntQuery(r *http.Request, key string, def int) int {
@@ -632,7 +598,7 @@ func (s *server) getArtworksCommon(w http.ResponseWriter, r *http.Request, withS
 	offset := (page - 1) * limit
 	args = append(args, limit, offset)
 	rows, err := s.db.Query(ctx, fmt.Sprintf(`
-SELECT aw.id, aw.title, aw.description, aw."svgData", aw."imageUrl", aw."contentType", aw."viewCount", aw."agentViewCount", aw.tags, aw.category, aw."createdAt",
+SELECT aw.id, aw.title, aw.description, aw."svgData", aw."imageUrl", aw."thumbnailUrl", aw."contentType", aw."r2Key", aw."fileSize", aw.width, aw.height, aw.prompt, aw.model, aw.tags, aw.category, aw."isPublic", aw."archivedAt", aw."createdAt", aw."updatedAt", aw."viewCount", aw."agentViewCount",
        ar.id, ar.name, ar."displayName", ar."avatarSvg",
        (SELECT COUNT(*) FROM "Favorite" f WHERE f."artworkId"=aw.id) AS favorites_count,
        (SELECT COUNT(*) FROM "Comment" c WHERE c."artworkId"=aw.id) AS comments_count
@@ -649,7 +615,9 @@ JOIN "Artist" ar ON ar.id=aw."artistId"
 	for rows.Next() {
 		var aw artwork
 		var favCount, comCount int
-		if err := rows.Scan(&aw.ID, &aw.Title, &aw.Description, &aw.SVGData, &aw.ImageURL, &aw.ContentType, &aw.ViewCount, &aw.AgentViewCount, &aw.Tags, &aw.Category, &aw.CreatedAt,
+		var thumbnailURL sql.NullString
+		var isPublic bool
+		if err := rows.Scan(&aw.ID, &aw.Title, &aw.Description, &aw.SVGData, &aw.ImageURL, &thumbnailURL, &aw.ContentType, &aw.R2Key, &aw.FileSize, &aw.Width, &aw.Height, &aw.Prompt, &aw.Model, &aw.Tags, &aw.Category, &isPublic, &aw.ArchivedAt, &aw.CreatedAt, &aw.UpdatedAt, &aw.ViewCount, &aw.AgentViewCount,
 			&aw.ArtistID, &aw.ArtistName, &aw.ArtistDisplay, &aw.ArtistAvatar, &favCount, &comCount); err != nil {
 			continue
 		}
@@ -665,7 +633,16 @@ JOIN "Artist" ar ON ar.id=aw."artistId"
 			"description":    nullString(aw.Description),
 			"svgData":        svg,
 			"imageUrl":       nullString(aw.ImageURL),
+			"thumbnailUrl":   nullString(thumbnailURL),
 			"contentType":    aw.ContentType,
+			"r2Key":          nullString(aw.R2Key),
+			"fileSize":       nullInt(aw.FileSize),
+			"width":          nullInt(aw.Width),
+			"height":         nullInt(aw.Height),
+			"prompt":         nullString(aw.Prompt),
+			"model":          nullString(aw.Model),
+			"isPublic":       isPublic,
+			"archivedAt":     nullTime(aw.ArchivedAt),
 			"hasSvg":         aw.SVGData.Valid,
 			"hasPng":         aw.ContentType == "png" && aw.ImageURL.Valid,
 			"viewCount":      aw.ViewCount,
@@ -673,6 +650,8 @@ JOIN "Artist" ar ON ar.id=aw."artistId"
 			"tags":           nullString(aw.Tags),
 			"category":       nullString(aw.Category),
 			"createdAt":      aw.CreatedAt,
+			"updatedAt":      aw.UpdatedAt,
+			"artistId":       aw.ArtistID,
 			"artist": map[string]any{
 				"id":          aw.ArtistID,
 				"name":        aw.ArtistName,
@@ -1229,12 +1208,11 @@ func (s *server) getArtistsV1(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		var totalArtworks, totalFavorites int
-		var totalViews int64
 		_ = s.db.QueryRow(ctx, `SELECT COUNT(*) FROM "Artwork" WHERE "artistId"=$1 AND "isPublic"=true AND "archivedAt" IS NULL`, id).Scan(&totalArtworks)
-		_ = s.db.QueryRow(ctx, `SELECT COUNT(*) FROM "Favorite" f JOIN "Artwork" aw ON aw.id=f."artworkId" WHERE aw."artistId"=$1`, id).Scan(&totalFavorites)
-		_ = s.db.QueryRow(ctx, `SELECT COALESCE(SUM("viewCount"),0) FROM "Artwork" WHERE "artistId"=$1 AND "isPublic"=true AND "archivedAt" IS NULL`, id).Scan(&totalViews)
+		_ = s.db.QueryRow(ctx, `SELECT COUNT(*) FROM "Favorite" WHERE "artistId"=$1`, id).Scan(&totalFavorites)
 
 		top := []map[string]any{}
+		totalViews := int64(0)
 		topRows, _ := s.db.Query(ctx, `SELECT id,title,"svgData","viewCount","createdAt" FROM "Artwork" WHERE "artistId"=$1 AND "isPublic"=true AND "archivedAt" IS NULL ORDER BY "viewCount" DESC LIMIT 3`, id)
 		if topRows != nil {
 			defer topRows.Close()
@@ -1244,6 +1222,7 @@ func (s *server) getArtistsV1(w http.ResponseWriter, r *http.Request) {
 				var views int
 				var createdAt time.Time
 				if topRows.Scan(&awID, &awTitle, &svg, &views, &createdAt) == nil {
+					totalViews += int64(views)
 					top = append(top, map[string]any{"id": awID, "title": awTitle, "svgData": nullString(svg), "viewCount": views, "createdAt": createdAt, "viewUrl": s.baseURL + "/artwork/" + awID})
 				}
 			}
@@ -1286,15 +1265,17 @@ func (s *server) getArtistsV1(w http.ResponseWriter, r *http.Request) {
 // ---------- Feeds ----------
 
 type feedActivity struct {
-	Type      string
-	ID        string
-	Timestamp time.Time
-	Title     string
-	Summary   string
-	HumanURL  string
-	AgentURL  string
-	Author    string
-	Data      map[string]any
+	Type          string
+	ID            string
+	Timestamp     time.Time
+	Title         string
+	Summary       string
+	HumanURL      string
+	AgentURL      string
+	Author        string
+	AuthorDisplay string
+	AuthorAvatar  string
+	Data          map[string]any
 }
 
 func (s *server) collectFeed(ctx context.Context) []feedActivity {
@@ -1310,7 +1291,7 @@ func (s *server) collectFeed(ctx context.Context) []feedActivity {
 			var fav, com int
 			if rows.Scan(&id, &title, &desc, &tags, &cat, &ts, &name, &display, &avatar, &fav, &com) == nil {
 				author := coalesce(display.String, name.String)
-				items = append(items, feedActivity{Type: "artwork", ID: "artwork-" + id, Timestamp: ts, Title: fmt.Sprintf("New artwork: %q", title), Summary: fmt.Sprintf("%s posted %q", author, title), HumanURL: s.baseURL + "/artwork/" + id, AgentURL: s.baseURL + "/api/v1/artworks/" + id, Author: name.String, Data: map[string]any{"artworkId": id, "title": title, "description": nullString(desc), "tags": nullString(tags), "category": nullString(cat), "stats": map[string]int{"favorites": fav, "comments": com}}})
+				items = append(items, feedActivity{Type: "artwork", ID: "artwork-" + id, Timestamp: ts, Title: fmt.Sprintf("New artwork: %q", title), Summary: fmt.Sprintf("%s posted %q", author, title), HumanURL: s.baseURL + "/artwork/" + id, AgentURL: s.baseURL + "/api/v1/artworks/" + id, Author: name.String, AuthorDisplay: display.String, AuthorAvatar: avatar.String, Data: map[string]any{"artworkId": id, "title": title, "description": nullString(desc), "tags": nullString(tags), "category": nullString(cat), "stats": map[string]int{"favorites": fav, "comments": com}}})
 			}
 		}
 	}
@@ -1324,7 +1305,7 @@ func (s *server) collectFeed(ctx context.Context) []feedActivity {
 			if comRows.Scan(&id, &content, &ts, &artistName, &artistDisplay, &avatar, &awID, &awTitle, &ownerName, &ownerDisplay) == nil {
 				author := coalesce(artistDisplay, artistName)
 				owner := coalesce(ownerDisplay, ownerName)
-				items = append(items, feedActivity{Type: "comment", ID: "comment-" + id, Timestamp: ts, Title: fmt.Sprintf("Comment on %q", awTitle), Summary: fmt.Sprintf("%s commented on %q by %s", author, awTitle, owner), HumanURL: s.baseURL + "/artwork/" + awID, AgentURL: s.baseURL + "/api/v1/artworks/" + awID, Author: artistName, Data: map[string]any{"commentId": id, "content": content, "artwork": map[string]any{"id": awID, "title": awTitle, "artist": owner}}})
+				items = append(items, feedActivity{Type: "comment", ID: "comment-" + id, Timestamp: ts, Title: fmt.Sprintf("Comment on %q", awTitle), Summary: fmt.Sprintf("%s commented on %q", author, awTitle), HumanURL: s.baseURL + "/artwork/" + awID, AgentURL: s.baseURL + "/api/v1/artworks/" + awID, Author: artistName, AuthorDisplay: artistDisplay, AuthorAvatar: avatar, Data: map[string]any{"commentId": id, "content": content, "artwork": map[string]any{"id": awID, "title": awTitle, "artist": owner}}})
 			}
 		}
 	}
@@ -1338,7 +1319,7 @@ func (s *server) collectFeed(ctx context.Context) []feedActivity {
 			if favRows.Scan(&id, &ts, &artistName, &artistDisplay, &avatar, &awID, &awTitle, &ownerName, &ownerDisplay) == nil {
 				author := coalesce(artistDisplay, artistName)
 				owner := coalesce(ownerDisplay, ownerName)
-				items = append(items, feedActivity{Type: "favorite", ID: "favorite-" + id, Timestamp: ts, Title: fmt.Sprintf("Favorited %q", awTitle), Summary: fmt.Sprintf("%s favorited %q by %s", author, awTitle, owner), HumanURL: s.baseURL + "/artwork/" + awID, AgentURL: s.baseURL + "/api/v1/artworks/" + awID, Author: artistName, Data: map[string]any{"artwork": map[string]any{"id": awID, "title": awTitle, "artist": owner}}})
+				items = append(items, feedActivity{Type: "favorite", ID: "favorite-" + id, Timestamp: ts, Title: fmt.Sprintf("Favorited %q", awTitle), Summary: fmt.Sprintf("%s favorited %q", author, awTitle), HumanURL: s.baseURL + "/artwork/" + awID, AgentURL: s.baseURL + "/api/v1/artworks/" + awID, Author: artistName, AuthorDisplay: artistDisplay, AuthorAvatar: avatar, Data: map[string]any{"artwork": map[string]any{"id": awID, "title": awTitle, "artist": owner}}})
 			}
 		}
 	}
@@ -1351,7 +1332,7 @@ func (s *server) collectFeed(ctx context.Context) []feedActivity {
 			var ts time.Time
 			if artistRows.Scan(&id, &name, &display, &bio, &avatar, &ts) == nil {
 				author := coalesce(display, name)
-				items = append(items, feedActivity{Type: "signup", ID: "signup-" + id, Timestamp: ts, Title: "New artist: " + author, Summary: author + " joined DevAIntArt", HumanURL: s.baseURL + "/artist/" + name, AgentURL: s.baseURL + "/api/v1/artists/" + name, Author: name, Data: map[string]any{"artistId": id, "name": name, "displayName": emptyToNil(display), "bio": emptyToNil(bio), "avatarSvg": emptyToNil(avatar)}})
+				items = append(items, feedActivity{Type: "signup", ID: "signup-" + id, Timestamp: ts, Title: "New artist: " + author, Summary: author + " joined DevAIntArt", HumanURL: s.baseURL + "/artist/" + name, AgentURL: s.baseURL + "/api/v1/artists/" + name, Author: name, AuthorDisplay: display, AuthorAvatar: avatar, Data: map[string]any{"artistId": id, "name": name, "displayName": emptyToNil(display), "bio": emptyToNil(bio), "avatarSvg": emptyToNil(avatar)}})
 			}
 		}
 	}
@@ -1370,25 +1351,35 @@ func (s *server) feedV1(w http.ResponseWriter, r *http.Request) {
 		entries = append(entries, map[string]any{
 			"type":      f.Type,
 			"id":        f.ID,
-			"timestamp": f.Timestamp.Format(time.RFC3339),
+			"timestamp": isoMillis(f.Timestamp),
 			"title":     f.Title,
 			"summary":   f.Summary,
 			"humanUrl":  f.HumanURL,
 			"agentUrl":  f.AgentURL,
 			"author": map[string]any{
 				"name":        f.Author,
-				"displayName": nil,
-				"avatarSvg":   nil,
+				"displayName": emptyToNil(f.AuthorDisplay),
+				"avatarSvg":   emptyToNil(f.AuthorAvatar),
 			},
 			"data": f.Data,
 		})
 	}
-	updated := time.Now().Format(time.RFC3339)
+	updated := isoMillis(time.Now())
 	if len(feed) > 0 {
-		updated = feed[0].Timestamp.Format(time.RFC3339)
+		updated = isoMillis(feed[0].Timestamp)
 	}
 	w.Header().Set("Cache-Control", "public, max-age=60")
-	s.json(w, 200, map[string]any{"success": true, "feed": map[string]any{"title": "DevAIntArt Activity Feed", "description": "Recent activity from AI artists on DevAIntArt", "updated": updated, "atomUrl": s.baseURL + "/api/feed", "entries": entries}})
+	s.json(w, 200, map[string]any{
+		"success": true,
+		"feed": map[string]any{
+			"title":       "DevAIntArt Activity Feed",
+			"description": "Recent activity from AI artists on DevAIntArt",
+			"updated":     updated,
+			"atomUrl":     s.baseURL + "/api/feed",
+			"entries":     entries,
+		},
+		"hint": "Poll this endpoint to watch for new activity. Use agentUrl to fetch full artwork details.",
+	})
 }
 
 func (s *server) atomFeed(w http.ResponseWriter, r *http.Request) {
@@ -1941,6 +1932,24 @@ func coalesce(a, b string) string {
 	return b
 }
 
+func resolveBaseURL() string {
+	candidates := []string{
+		os.Getenv("BASE_URL"),
+		os.Getenv("NEXT_PUBLIC_BASE_URL"),
+	}
+	for _, candidate := range candidates {
+		value := strings.TrimSpace(candidate)
+		if value == "" {
+			continue
+		}
+		if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
+			return strings.TrimRight(value, "/")
+		}
+		return "https://" + strings.TrimRight(value, "/")
+	}
+	return "https://devaintart.net"
+}
+
 func ceilDiv(a, b int) int {
 	if b <= 0 || a == 0 {
 		return 0
@@ -1952,4 +1961,22 @@ func urlPathEscape(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.ReplaceAll(s, " ", "%20")
 	return s
+}
+
+func nullTime(t sql.NullTime) any {
+	if !t.Valid {
+		return nil
+	}
+	return t.Time
+}
+
+func nullInt(i sql.NullInt64) any {
+	if !i.Valid {
+		return nil
+	}
+	return i.Int64
+}
+
+func isoMillis(t time.Time) string {
+	return t.UTC().Format("2006-01-02T15:04:05.000Z")
 }

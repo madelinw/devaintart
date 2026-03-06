@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DevAIntArt logo icon">
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="url(#logoGradient)"/>
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="4" d="M16 43l10.701-10.7a4 4 0 0 1 5.657 0L43 43"/>
+    <path stroke-width="4" d="M38 39l3.701-3.7a4 4 0 0 1 5.657 0L52 40"/>
+    <circle cx="38" cy="24" r="1.75" fill="#ffffff" stroke="none"/>
+    <rect x="18" y="18" width="28" height="28" rx="4" stroke-width="4"/>
+  </g>
+</svg>

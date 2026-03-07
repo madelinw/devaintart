@@ -46,6 +46,8 @@ type server struct {
 	baseURL    string
 	r2         *r2Client
 	resvgBin   string
+	chromeBin  string
+	thumbJobs  chan thumbnailJob
 	skillMD    string
 	heartbeat  string
 	pageCache  *htmlPageCache
@@ -117,6 +119,11 @@ type quotaInfo struct {
 	PercentUsed     float64 `json:"percentUsed"`
 }
 
+type thumbnailJob struct {
+	ArtworkID string
+	SVG       string
+}
+
 const (
 	maxSVGSize      = int64(500 * 1024)
 	maxPNGSize      = int64(15 * 1024 * 1024)
@@ -126,9 +133,11 @@ const (
 	ogMaxSVGBytes    = int64(700 * 1024)
 	ogRenderTimeout  = 8 * time.Second
 	ogRenderedMaxPNG = int64(20 * 1024 * 1024)
-	homePageTTL     = 30 * time.Second
-	tagsPageTTL     = 60 * time.Second
-	chatterPageTTL  = 30 * time.Second
+	thumbQueueSize   = 64
+	thumbRenderTTL   = 20 * time.Second
+	homePageTTL      = 30 * time.Second
+	tagsPageTTL      = 60 * time.Second
+	chatterPageTTL   = 30 * time.Second
 )
 
 func main() {
@@ -160,10 +169,13 @@ func main() {
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		r2:         r2,
 		resvgBin:   coalesce(os.Getenv("RESVG_BIN"), "resvg"),
+		chromeBin:  coalesce(os.Getenv("CHROME_BIN"), "chromium-browser"),
+		thumbJobs:  make(chan thumbnailJob, thumbQueueSize),
 		skillMD:    string(skillMD),
 		heartbeat:  string(heartbeat),
 		pageCache:  &htmlPageCache{entries: map[string]cachedHTMLPage{}},
 	}
+	s.startThumbnailWorker()
 
 	r := chi.NewRouter()
 	r.Get("/", s.homePage)
@@ -921,6 +933,9 @@ VALUES ($1,$2,$3,$4,$5,NULL,$6,$7,$8,$9,$10,$11,$12,$13,$14,true,NOW(),NOW(),$15
 		return
 	}
 	_, _ = s.db.Exec(ctx, `UPDATE "Artist" SET "lastActiveAt"=NOW(), "updatedAt"=NOW() WHERE id=$1`, a.ID)
+	if contentType == "svg" && svgData != nil {
+		s.enqueueThumbnailJob(id, *svgData)
+	}
 
 	s.json(w, 201, map[string]any{
 		"success": true,
@@ -1696,6 +1711,15 @@ func (s *server) ogImage(w http.ResponseWriter, r *http.Request) {
 	if s.r2 != nil {
 		cacheURL = s.r2.publicURL + "/" + cacheKey
 	}
+	if s.r2 != nil && thumbURL.Valid && strings.HasPrefix(thumbURL.String, s.r2.publicURL+"/") {
+		thumbKey := strings.TrimPrefix(thumbURL.String, s.r2.publicURL+"/")
+		if b, err := s.getR2(ctx, thumbKey); err == nil {
+			w.Header().Set("Content-Type", "image/png")
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			_, _ = w.Write(b)
+			return
+		}
+	}
 	// Fast path: DB points to the current cache key.
 	if s.r2 != nil && thumbURL.Valid && thumbURL.String == cacheURL {
 		if b, err := s.getR2(ctx, cacheKey); err == nil {
@@ -1772,6 +1796,129 @@ func (s *server) renderSVGToPNGWithResvg(ctx context.Context, svg string, width,
 		return nil, errors.New("rendered PNG exceeded safety limit")
 	}
 	return out, nil
+}
+
+func (s *server) startThumbnailWorker() {
+	go func() {
+		for job := range s.thumbJobs {
+			s.processThumbnailJob(job)
+		}
+	}()
+}
+
+func (s *server) enqueueThumbnailJob(artworkID, svg string) {
+	if s.r2 == nil {
+		return
+	}
+	select {
+	case s.thumbJobs <- thumbnailJob{ArtworkID: artworkID, SVG: svg}:
+	default:
+		log.Printf("thumbnail queue full; dropping job artwork=%s", artworkID)
+	}
+}
+
+func (s *server) processThumbnailJob(job thumbnailJob) {
+	if s.r2 == nil {
+		return
+	}
+	if int64(len(job.SVG)) > ogMaxSVGBytes {
+		log.Printf("thumbnail skipped: svg too large artwork=%s bytes=%d", job.ArtworkID, len(job.SVG))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), thumbRenderTTL)
+	defer cancel()
+
+	out, err := s.renderSVGToPNGWithChrome(ctx, job.SVG, 1200, 1200)
+	if err != nil {
+		log.Printf("thumbnail chrome render failed artwork=%s: %v; using raster fallback", job.ArtworkID, err)
+		out, err = renderSVGToPNG(job.SVG, 1200, 1200)
+		if err != nil {
+			log.Printf("thumbnail fallback render failed artwork=%s: %v", job.ArtworkID, err)
+			return
+		}
+	}
+	if int64(len(out)) > ogRenderedMaxPNG {
+		log.Printf("thumbnail skipped: output too large artwork=%s bytes=%d", job.ArtworkID, len(out))
+		return
+	}
+
+	key := fmt.Sprintf("thumbnails/%s.png", job.ArtworkID)
+	if err := s.putR2(ctx, key, out); err != nil {
+		log.Printf("thumbnail upload failed artwork=%s key=%s err=%v", job.ArtworkID, key, err)
+		return
+	}
+	url := s.r2.publicURL + "/" + key
+	if _, err := s.db.Exec(ctx, `UPDATE "Artwork" SET "thumbnailUrl"=$1 WHERE id=$2`, url, job.ArtworkID); err != nil {
+		log.Printf("thumbnail DB update failed artwork=%s: %v", job.ArtworkID, err)
+		return
+	}
+	log.Printf("thumbnail generated artwork=%s key=%s", job.ArtworkID, key)
+}
+
+func (s *server) renderSVGToPNGWithChrome(ctx context.Context, svg string, width, height int) ([]byte, error) {
+	tmpDir, err := os.MkdirTemp("", "devaintart-thumb-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	inPath := tmpDir + "/in.html"
+	outPath := tmpDir + "/out.png"
+	html := `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:#18181b;width:100%;height:100%;overflow:hidden}svg{width:100%;height:100%;display:block}</style></head><body>` + svg + `</body></html>`
+	if err := os.WriteFile(inPath, []byte(html), 0600); err != nil {
+		return nil, err
+	}
+
+	candidates := []string{s.chromeBin, "chromium-browser", "chromium", "google-chrome-stable", "google-chrome"}
+	seen := map[string]bool{}
+	var lastErr error
+	for _, bin := range candidates {
+		bin = strings.TrimSpace(bin)
+		if bin == "" || seen[bin] {
+			continue
+		}
+		seen[bin] = true
+		if _, err := exec.LookPath(bin); err != nil {
+			lastErr = err
+			continue
+		}
+
+		cmd := exec.CommandContext(ctx, bin,
+			"--headless=new",
+			"--disable-gpu",
+			"--no-sandbox",
+			"--hide-scrollbars",
+			"--window-size="+strconv.Itoa(width)+","+strconv.Itoa(height),
+			"--screenshot="+outPath,
+			"file://"+inPath,
+		)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			msg := strings.TrimSpace(stderr.String())
+			if msg == "" {
+				msg = err.Error()
+			}
+			lastErr = fmt.Errorf("%s failed: %s", bin, msg)
+			continue
+		}
+
+		out, err := os.ReadFile(outPath)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if len(out) == 0 {
+			lastErr = errors.New("chrome produced empty screenshot")
+			continue
+		}
+		return out, nil
+	}
+	if lastErr == nil {
+		lastErr = errors.New("no chrome binary found")
+	}
+	return nil, lastErr
 }
 
 func renderSVGToPNG(svg string, width, height int) ([]byte, error) {

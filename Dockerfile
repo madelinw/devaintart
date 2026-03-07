@@ -12,7 +12,13 @@ RUN CGO_ENABLED=0 go build -o /bin/devaintart ./cmd/server
 
 FROM alpine:3.20
 WORKDIR /app
-RUN apk add --no-cache resvg
+RUN apk add --no-cache \
+  resvg \
+  fontconfig \
+  ttf-dejavu \
+  font-noto \
+  font-noto-cjk \
+  font-noto-emoji
 COPY --from=build /bin/devaintart /app/devaintart
 COPY gosource/static /app/static
 ENV PORT=3000

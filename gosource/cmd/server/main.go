@@ -134,6 +134,7 @@ const (
 	ogRenderTimeout  = 8 * time.Second
 	ogRenderedMaxPNG = int64(20 * 1024 * 1024)
 	thumbQueueSize   = 64
+	thumbWorkerCount = 2
 	thumbRenderTTL   = 20 * time.Second
 	homePageTTL      = 30 * time.Second
 	tagsPageTTL      = 60 * time.Second
@@ -1693,8 +1694,10 @@ func (s *server) ogImage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer resp.Body.Close()
+		w.Header().Set("X-OG-Source", "png-origin-proxy")
 		w.Header().Set("Content-Type", "image/png")
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		log.Printf("og source=png-origin-proxy artwork=%s", id)
 		_, _ = io.Copy(w, resp.Body)
 		return
 	}
@@ -1714,8 +1717,10 @@ func (s *server) ogImage(w http.ResponseWriter, r *http.Request) {
 	if s.r2 != nil && thumbURL.Valid && strings.HasPrefix(thumbURL.String, s.r2.publicURL+"/") {
 		thumbKey := strings.TrimPrefix(thumbURL.String, s.r2.publicURL+"/")
 		if b, err := s.getR2(ctx, thumbKey); err == nil {
+			w.Header().Set("X-OG-Source", "thumbnail-r2")
 			w.Header().Set("Content-Type", "image/png")
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			log.Printf("og source=thumbnail-r2 artwork=%s key=%s", id, thumbKey)
 			_, _ = w.Write(b)
 			return
 		}
@@ -1723,41 +1728,57 @@ func (s *server) ogImage(w http.ResponseWriter, r *http.Request) {
 	// Fast path: DB points to the current cache key.
 	if s.r2 != nil && thumbURL.Valid && thumbURL.String == cacheURL {
 		if b, err := s.getR2(ctx, cacheKey); err == nil {
+			w.Header().Set("X-OG-Source", "og-r2-metadata-hit")
 			w.Header().Set("Content-Type", "image/png")
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			log.Printf("og source=og-r2-metadata-hit artwork=%s key=%s", id, cacheKey)
 			_, _ = w.Write(b)
 			return
 		}
 	}
 	if s.r2 != nil {
 		if b, err := s.getR2(ctx, cacheKey); err == nil {
+			w.Header().Set("X-OG-Source", "og-r2-key-hit")
 			w.Header().Set("Content-Type", "image/png")
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			log.Printf("og source=og-r2-key-hit artwork=%s key=%s", id, cacheKey)
 			_, _ = w.Write(b)
 			return
 		}
 	}
 
-	out, err := renderSVGToPNG(svgData.String, 1200, 1200)
+	renderSource := "chrome-primary"
+	renderCtx, cancel := context.WithTimeout(ctx, thumbRenderTTL)
+	defer cancel()
+	out, err := s.renderSVGToPNGWithChrome(renderCtx, svgData.String, 1200, 1200)
 	if err != nil {
-		log.Printf("og raster render failed for artwork=%s: %v; trying resvg fallback", id, err)
-		renderCtx, cancel := context.WithTimeout(ctx, ogRenderTimeout)
-		defer cancel()
-		out, err = s.renderSVGToPNGWithResvg(renderCtx, svgData.String, 1200, 1200)
+		log.Printf("og chrome render failed for artwork=%s: %v; trying raster fallback", id, err)
+		renderSource = "raster-fallback"
+		out, err = renderSVGToPNG(svgData.String, 1200, 1200)
 		if err != nil {
-			log.Printf("og resvg fallback failed for artwork=%s: %v", id, err)
-			http.Error(w, "Error rendering image", 500)
-			return
+			log.Printf("og raster render failed for artwork=%s: %v; trying resvg fallback", id, err)
+			renderSource = "resvg-fallback"
+			resvgCtx, resvgCancel := context.WithTimeout(ctx, ogRenderTimeout)
+			defer resvgCancel()
+			out, err = s.renderSVGToPNGWithResvg(resvgCtx, svgData.String, 1200, 1200)
+			if err != nil {
+				log.Printf("og resvg fallback failed for artwork=%s: %v", id, err)
+				http.Error(w, "Error rendering image", 500)
+				return
+			}
 		}
 	}
 	if s.r2 != nil {
 		if err := s.putR2(ctx, cacheKey, out); err == nil {
 			cacheURL = s.r2.publicURL + "/" + cacheKey
 			_, _ = s.db.Exec(ctx, `UPDATE "Artwork" SET "thumbnailUrl"=$1 WHERE id=$2`, cacheURL, id)
+			log.Printf("og cache write artwork=%s key=%s source=%s", id, cacheKey, renderSource)
 		}
 	}
+	w.Header().Set("X-OG-Source", renderSource)
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	log.Printf("og source=%s artwork=%s", renderSource, id)
 	_, _ = w.Write(out)
 }
 
@@ -1799,11 +1820,15 @@ func (s *server) renderSVGToPNGWithResvg(ctx context.Context, svg string, width,
 }
 
 func (s *server) startThumbnailWorker() {
-	go func() {
-		for job := range s.thumbJobs {
-			s.processThumbnailJob(job)
-		}
-	}()
+	for i := 1; i <= thumbWorkerCount; i++ {
+		workerID := i
+		go func() {
+			log.Printf("thumbnail worker started id=%d", workerID)
+			for job := range s.thumbJobs {
+				s.processThumbnailJob(workerID, job)
+			}
+		}()
+	}
 }
 
 func (s *server) enqueueThumbnailJob(artworkID, svg string) {
@@ -1812,17 +1837,19 @@ func (s *server) enqueueThumbnailJob(artworkID, svg string) {
 	}
 	select {
 	case s.thumbJobs <- thumbnailJob{ArtworkID: artworkID, SVG: svg}:
+		log.Printf("thumbnail enqueue artwork=%s queue_len=%d queue_cap=%d", artworkID, len(s.thumbJobs), cap(s.thumbJobs))
 	default:
 		log.Printf("thumbnail queue full; dropping job artwork=%s", artworkID)
 	}
 }
 
-func (s *server) processThumbnailJob(job thumbnailJob) {
+func (s *server) processThumbnailJob(workerID int, job thumbnailJob) {
 	if s.r2 == nil {
 		return
 	}
+	log.Printf("thumbnail worker=%d start artwork=%s svg_bytes=%d", workerID, job.ArtworkID, len(job.SVG))
 	if int64(len(job.SVG)) > ogMaxSVGBytes {
-		log.Printf("thumbnail skipped: svg too large artwork=%s bytes=%d", job.ArtworkID, len(job.SVG))
+		log.Printf("thumbnail worker=%d skipped artwork=%s reason=svg_too_large bytes=%d", workerID, job.ArtworkID, len(job.SVG))
 		return
 	}
 
@@ -1831,29 +1858,29 @@ func (s *server) processThumbnailJob(job thumbnailJob) {
 
 	out, err := s.renderSVGToPNGWithChrome(ctx, job.SVG, 1200, 1200)
 	if err != nil {
-		log.Printf("thumbnail chrome render failed artwork=%s: %v; using raster fallback", job.ArtworkID, err)
+		log.Printf("thumbnail worker=%d chrome render failed artwork=%s: %v; using raster fallback", workerID, job.ArtworkID, err)
 		out, err = renderSVGToPNG(job.SVG, 1200, 1200)
 		if err != nil {
-			log.Printf("thumbnail fallback render failed artwork=%s: %v", job.ArtworkID, err)
+			log.Printf("thumbnail worker=%d fallback render failed artwork=%s: %v", workerID, job.ArtworkID, err)
 			return
 		}
 	}
 	if int64(len(out)) > ogRenderedMaxPNG {
-		log.Printf("thumbnail skipped: output too large artwork=%s bytes=%d", job.ArtworkID, len(out))
+		log.Printf("thumbnail worker=%d skipped artwork=%s reason=output_too_large bytes=%d", workerID, job.ArtworkID, len(out))
 		return
 	}
 
 	key := fmt.Sprintf("thumbnails/%s.png", job.ArtworkID)
 	if err := s.putR2(ctx, key, out); err != nil {
-		log.Printf("thumbnail upload failed artwork=%s key=%s err=%v", job.ArtworkID, key, err)
+		log.Printf("thumbnail worker=%d upload failed artwork=%s key=%s err=%v", workerID, job.ArtworkID, key, err)
 		return
 	}
 	url := s.r2.publicURL + "/" + key
 	if _, err := s.db.Exec(ctx, `UPDATE "Artwork" SET "thumbnailUrl"=$1 WHERE id=$2`, url, job.ArtworkID); err != nil {
-		log.Printf("thumbnail DB update failed artwork=%s: %v", job.ArtworkID, err)
+		log.Printf("thumbnail worker=%d DB update failed artwork=%s: %v", workerID, job.ArtworkID, err)
 		return
 	}
-	log.Printf("thumbnail generated artwork=%s key=%s", job.ArtworkID, key)
+	log.Printf("thumbnail worker=%d generated artwork=%s key=%s bytes=%d", workerID, job.ArtworkID, key, len(out))
 }
 
 func (s *server) renderSVGToPNGWithChrome(ctx context.Context, svg string, width, height int) ([]byte, error) {

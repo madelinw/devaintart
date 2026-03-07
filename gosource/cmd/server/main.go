@@ -2039,7 +2039,7 @@ pre{white-space:pre-wrap}
 .header-brand-icon svg{width:1.5rem;height:1.5rem;color:#fff}
 .site-main{max-width:1536px;margin:0 auto;flex:1;padding:2rem 1rem}
 .avatar,.avatar-svg{width:1.5rem;height:1.5rem;border-radius:9999px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;background:#27272a;color:#fff;font-size:.75rem;font-weight:700}
-.avatar-svg svg{width:100%;height:100%;display:block}.avatar-lg .avatar,.avatar-lg .avatar-svg{width:3rem;height:3rem}
+.avatar-svg svg,.avatar-svg img{width:100%;height:100%;display:block}.avatar-lg .avatar,.avatar-lg .avatar-svg{width:3rem;height:3rem}
 .svg-container svg,.preview svg{width:100%;height:100%;object-fit:contain;display:block}.svg-container img,.preview img{width:100%;height:100%;object-fit:cover;display:block}.preview{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#18181b}
 .artwork-card{display:block;background:rgba(24,24,27,.96);border:1px solid var(--panel-border);border-radius:1rem;overflow:hidden}.artwork-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.8),transparent 55%);opacity:0}.artwork-stats{position:absolute;left:1rem;right:1rem;bottom:1rem;display:flex;gap:1rem;color:#fff;font-size:.875rem;transform:translateY(100%)}.artwork-media{position:relative;aspect-ratio:1/1;overflow:hidden;background:#18181b;display:flex;align-items:center;justify-content:center}.artwork-body{padding:1rem}
 .list-disc{list-style:disc}.list-inside{list-style-position:inside}.max-w-2xl{max-width:42rem}.max-w-4xl{max-width:56rem}.max-w-screen-2xl{max-width:1536px}
@@ -2864,14 +2864,14 @@ func initials(s string) string {
 
 func renderAvatar(svg, name string) string {
 	if strings.TrimSpace(svg) != "" {
-		return `<span class="avatar-svg">` + svg + `</span>`
+		return `<span class="avatar-svg"><img alt="" src="` + template.HTMLEscapeString(svgDataURL(svg)) + `" loading="lazy" decoding="async"></span>`
 	}
 	return `<span class="avatar">` + template.HTMLEscapeString(initials(name)) + `</span>`
 }
 
 func avatarOrFallback(svg, name string, size int) string {
 	if strings.TrimSpace(svg) != "" {
-		return svg
+		return `<img alt="" src="` + template.HTMLEscapeString(svgDataURL(svg)) + `" loading="lazy" decoding="async" style="width:` + strconv.Itoa(size) + `px;height:` + strconv.Itoa(size) + `px;border-radius:9999px;display:block">`
 	}
 	fontSize := size / 3
 	if fontSize < 14 {
@@ -2885,7 +2885,7 @@ func renderArtworkDetail(contentType string, img, svg sql.NullString) string {
 		return `<img alt="" src="` + template.HTMLEscapeString(img.String) + `">`
 	}
 	if svg.Valid {
-		return svg.String
+		return `<img alt="" src="` + template.HTMLEscapeString(svgDataURL(svg.String)) + `" decoding="async">`
 	}
 	return `<div class="muted">No artwork available</div>`
 }
@@ -2895,10 +2895,13 @@ func renderArtworkPreview(contentType string, img, svg sql.NullString) string {
 		return `<img alt="" src="` + template.HTMLEscapeString(img.String) + `" loading="lazy" decoding="async">`
 	}
 	if svg.Valid {
-		encoded := base64.StdEncoding.EncodeToString([]byte(svg.String))
-		return `<img alt="" src="data:image/svg+xml;base64,` + encoded + `" loading="lazy" decoding="async">`
+		return `<img alt="" src="` + template.HTMLEscapeString(svgDataURL(svg.String)) + `" loading="lazy" decoding="async">`
 	}
 	return `<div class="muted">No artwork available</div>`
+}
+
+func svgDataURL(svg string) string {
+	return "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString([]byte(svg))
 }
 
 func renderProdArtworkCard(id, title, artistName, artistDisplay, artistAvatar, preview string, views, favCount, comCount, agentViews int, createdAt time.Time) string {

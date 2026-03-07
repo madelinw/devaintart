@@ -19,6 +19,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
@@ -44,6 +45,7 @@ type server struct {
 	httpClient *http.Client
 	baseURL    string
 	r2         *r2Client
+	resvgBin   string
 	skillMD    string
 	heartbeat  string
 	pageCache  *htmlPageCache
@@ -119,6 +121,11 @@ const (
 	maxSVGSize      = int64(500 * 1024)
 	maxPNGSize      = int64(15 * 1024 * 1024)
 	dailyQuotaBytes = int64(45 * 1024 * 1024)
+
+	// Safety bounds for OG generation.
+	ogMaxSVGBytes    = int64(700 * 1024)
+	ogRenderTimeout  = 8 * time.Second
+	ogRenderedMaxPNG = int64(20 * 1024 * 1024)
 	homePageTTL     = 30 * time.Second
 	tagsPageTTL     = 60 * time.Second
 	chatterPageTTL  = 30 * time.Second
@@ -152,6 +159,7 @@ func main() {
 		httpClient: &http.Client{Timeout: 20 * time.Second},
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		r2:         r2,
+		resvgBin:   coalesce(os.Getenv("RESVG_BIN"), "resvg"),
 		skillMD:    string(skillMD),
 		heartbeat:  string(heartbeat),
 		pageCache:  &htmlPageCache{entries: map[string]cachedHTMLPage{}},
@@ -1656,9 +1664,9 @@ func (s *server) ogImage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := strings.TrimSuffix(chi.URLParam(r, "id"), ".png")
 	var contentType string
-	var svgData, imageURL sql.NullString
+	var svgData, imageURL, thumbURL sql.NullString
 	var updatedAt time.Time
-	err := s.db.QueryRow(ctx, `SELECT "contentType","svgData","imageUrl","updatedAt" FROM "Artwork" WHERE id=$1`, id).Scan(&contentType, &svgData, &imageURL, &updatedAt)
+	err := s.db.QueryRow(ctx, `SELECT "contentType","svgData","imageUrl","thumbnailUrl","updatedAt" FROM "Artwork" WHERE id=$1`, id).Scan(&contentType, &svgData, &imageURL, &thumbURL, &updatedAt)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1679,7 +1687,24 @@ func (s *server) ogImage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if int64(len(svgData.String)) > ogMaxSVGBytes {
+		http.Error(w, "SVG too large to render OG image safely", http.StatusRequestEntityTooLarge)
+		return
+	}
 	cacheKey := fmt.Sprintf("og/%s-%d.png", id, updatedAt.UnixMilli())
+	cacheURL := ""
+	if s.r2 != nil {
+		cacheURL = s.r2.publicURL + "/" + cacheKey
+	}
+	// Fast path: DB points to the current cache key.
+	if s.r2 != nil && thumbURL.Valid && thumbURL.String == cacheURL {
+		if b, err := s.getR2(ctx, cacheKey); err == nil {
+			w.Header().Set("Content-Type", "image/png")
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			_, _ = w.Write(b)
+			return
+		}
+	}
 	if s.r2 != nil {
 		if b, err := s.getR2(ctx, cacheKey); err == nil {
 			w.Header().Set("Content-Type", "image/png")
@@ -1689,17 +1714,60 @@ func (s *server) ogImage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	out, err := renderSVGToPNG(svgData.String, 1200, 1200)
+	renderCtx, cancel := context.WithTimeout(ctx, ogRenderTimeout)
+	defer cancel()
+	out, err := s.renderSVGToPNGWithResvg(renderCtx, svgData.String, 1200, 1200)
 	if err != nil {
+		log.Printf("og render failed for artwork=%s: %v", id, err)
 		http.Error(w, "Error rendering image", 500)
 		return
 	}
 	if s.r2 != nil {
-		_ = s.putR2(ctx, cacheKey, out)
+		if err := s.putR2(ctx, cacheKey, out); err == nil {
+			cacheURL = s.r2.publicURL + "/" + cacheKey
+			_, _ = s.db.Exec(ctx, `UPDATE "Artwork" SET "thumbnailUrl"=$1 WHERE id=$2`, cacheURL, id)
+		}
 	}
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	_, _ = w.Write(out)
+}
+
+func (s *server) renderSVGToPNGWithResvg(ctx context.Context, svg string, width, height int) ([]byte, error) {
+	tmpDir, err := os.MkdirTemp("", "devaintart-og-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	inPath := tmpDir + "/in.svg"
+	outPath := tmpDir + "/out.png"
+	if err := os.WriteFile(inPath, []byte(svg), 0600); err != nil {
+		return nil, err
+	}
+
+	cmd := exec.CommandContext(ctx, s.resvgBin, "--width", strconv.Itoa(width), "--height", strconv.Itoa(height), inPath, outPath)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return nil, fmt.Errorf("resvg failed: %s", msg)
+	}
+
+	out, err := os.ReadFile(outPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, errors.New("resvg produced empty output")
+	}
+	if int64(len(out)) > ogRenderedMaxPNG {
+		return nil, errors.New("rendered PNG exceeded safety limit")
+	}
+	return out, nil
 }
 
 func renderSVGToPNG(svg string, width, height int) ([]byte, error) {

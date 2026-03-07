@@ -201,7 +201,32 @@ func main() {
 		})
 	})
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL != nil && strings.HasPrefix(r.URL.Path, "/api") {
+			s.json(w, 404, map[string]any{
+				"success": false,
+				"error":   "API endpoint not found",
+				"hint":    fmt.Sprintf("No route for %s %s. Check %s/skill.md for supported endpoints.", r.Method, r.URL.Path, s.baseURL),
+				"docs":    s.baseURL + "/skill.md",
+				"path":    r.URL.Path,
+				"method":  r.Method,
+			})
+			return
+		}
 		s.renderPage(w, "404 - DevAIntArt", template.HTML(`<h1>Not Found</h1><p class="muted">This page does not exist.</p><p><a href="/">Go home</a></p>`))
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL != nil && strings.HasPrefix(r.URL.Path, "/api") {
+			s.json(w, 405, map[string]any{
+				"success": false,
+				"error":   "Method not allowed",
+				"hint":    fmt.Sprintf("%s is not supported for %s. Check %s/skill.md for supported methods.", r.Method, r.URL.Path, s.baseURL),
+				"docs":    s.baseURL + "/skill.md",
+				"path":    r.URL.Path,
+				"method":  r.Method,
+			})
+			return
+		}
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	})
 
 	port := os.Getenv("PORT")

@@ -185,6 +185,8 @@ func main() {
 			r.Post("/agents/register", s.registerAgent)
 			r.Get("/agents/me", s.getAgentMe)
 			r.Patch("/agents/me", s.patchAgentMe)
+			r.Get("/me", s.getMeAlias)
+			r.Patch("/me", s.patchMeAlias)
 			r.Get("/agents/status", s.getAgentStatus)
 
 			r.Get("/artworks", s.getArtworksV1)
@@ -197,6 +199,10 @@ func main() {
 			r.Get("/artists/{name}", s.getArtistV1)
 			r.Post("/comments", s.postComment)
 			r.Post("/favorites", s.postFavorite)
+			r.Post("/favorites/{id}", s.postFavoriteByArtworkIDAlias)
+			r.Post("/artworks/{id}/comments", s.postArtworkCommentAlias)
+			r.Post("/artworks/{id}/favorite", s.postArtworkFavoriteAlias)
+			r.Post("/artworks/{id}/favorites", s.postArtworkFavoriteAlias)
 			r.Get("/feed", s.feedV1)
 		})
 	})
@@ -309,6 +315,40 @@ FROM "Artist" WHERE "apiKey"=$1`, apiKey).Scan(
 	a.AvatarSVG.Valid = a.AvatarSVG.String != ""
 	a.XUsername.Valid = a.XUsername.String != ""
 	return &a, nil
+}
+
+func injectArtworkIDIntoJSONBody(r *http.Request, artworkID string) error {
+	if strings.TrimSpace(artworkID) == "" {
+		return errors.New("artwork id is required")
+	}
+	var raw []byte
+	if r.Body != nil {
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			return err
+		}
+		raw = b
+	}
+
+	payload := map[string]any{}
+	if len(strings.TrimSpace(string(raw))) > 0 {
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return err
+		}
+	}
+
+	payload["artworkId"] = artworkID
+	rebuilt, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	r.Body = io.NopCloser(bytes.NewReader(rebuilt))
+	r.ContentLength = int64(len(rebuilt))
+	if r.Header.Get("Content-Type") == "" {
+		r.Header.Set("Content-Type", "application/json")
+	}
+	return nil
 }
 
 func pacificDateString(now time.Time) string {
@@ -878,6 +918,14 @@ VALUES ($1,$2,$3,$4,$5,NULL,$6,$7,$8,$9,$10,$11,$12,$13,$14,true,NOW(),NOW(),$15
 	})
 }
 
+func (s *server) getMeAlias(w http.ResponseWriter, r *http.Request) {
+	s.getAgentMe(w, r)
+}
+
+func (s *server) patchMeAlias(w http.ResponseWriter, r *http.Request) {
+	s.patchAgentMe(w, r)
+}
+
 func (s *server) getArtworkV1(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := chi.URLParam(r, "id")
@@ -1179,6 +1227,20 @@ func (s *server) postComment(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *server) postArtworkCommentAlias(w http.ResponseWriter, r *http.Request) {
+	artworkID := strings.TrimSpace(chi.URLParam(r, "id"))
+	if err := injectArtworkIDIntoJSONBody(r, artworkID); err != nil {
+		s.json(w, 400, map[string]any{
+			"success": false,
+			"error":   "Invalid JSON body",
+			"hint":    "Send JSON with a valid content field. See /skill.md for examples.",
+			"docs":    s.baseURL + "/skill.md",
+		})
+		return
+	}
+	s.postComment(w, r)
+}
+
 func (s *server) postFavorite(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	a, _ := s.authArtist(ctx, r)
@@ -1218,6 +1280,34 @@ func (s *server) postFavorite(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = s.db.Exec(ctx, `UPDATE "Artwork" SET "agentViewCount"="agentViewCount"+1, "updatedAt"=NOW() WHERE id=$1`, id)
 	s.json(w, 201, map[string]any{"success": true, "message": "Artwork favorited! 🎨", "favorited": true, "artwork": map[string]any{"id": id, "title": artTitle, "artist": artOwner}})
+}
+
+func (s *server) postArtworkFavoriteAlias(w http.ResponseWriter, r *http.Request) {
+	artworkID := strings.TrimSpace(chi.URLParam(r, "id"))
+	if err := injectArtworkIDIntoJSONBody(r, artworkID); err != nil {
+		s.json(w, 400, map[string]any{
+			"success": false,
+			"error":   "Invalid JSON body",
+			"hint":    "Send JSON or an empty body. See /skill.md for examples.",
+			"docs":    s.baseURL + "/skill.md",
+		})
+		return
+	}
+	s.postFavorite(w, r)
+}
+
+func (s *server) postFavoriteByArtworkIDAlias(w http.ResponseWriter, r *http.Request) {
+	artworkID := strings.TrimSpace(chi.URLParam(r, "id"))
+	if err := injectArtworkIDIntoJSONBody(r, artworkID); err != nil {
+		s.json(w, 400, map[string]any{
+			"success": false,
+			"error":   "Invalid JSON body",
+			"hint":    "Send JSON or an empty body. See /skill.md for examples.",
+			"docs":    s.baseURL + "/skill.md",
+		})
+		return
+	}
+	s.postFavorite(w, r)
 }
 
 // ---------- Artists ----------

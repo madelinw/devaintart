@@ -1718,9 +1718,13 @@ func (s *server) ogImage(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	out, err := s.renderSVGToPNGWithResvg(renderCtx, svgData.String, 1200, 1200)
 	if err != nil {
-		log.Printf("og render failed for artwork=%s: %v", id, err)
-		http.Error(w, "Error rendering image", 500)
-		return
+		log.Printf("og resvg render failed for artwork=%s: %v; falling back to raster renderer", id, err)
+		out, err = renderSVGToPNG(svgData.String, 1200, 1200)
+		if err != nil {
+			log.Printf("og fallback render failed for artwork=%s: %v", id, err)
+			http.Error(w, "Error rendering image", 500)
+			return
+		}
 	}
 	if s.r2 != nil {
 		if err := s.putR2(ctx, cacheKey, out); err == nil {

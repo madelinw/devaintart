@@ -2366,7 +2366,7 @@ func (s *server) artworkPage(w http.ResponseWriter, r *http.Request) {
 	_, _ = s.db.Exec(ctx, `UPDATE "Artwork" SET "viewCount"="viewCount"+1, "updatedAt"=NOW() WHERE id=$1`, id)
 	favCount, comCount := s.countArtworkStats(ctx, id)
 	comments := s.loadComments(ctx, id, 100)
-	preview := renderArtworkPreview(aw.ContentType, aw.ImageURL, aw.SVGData)
+	preview := renderArtworkDetail(aw.ContentType, aw.ImageURL, aw.SVGData)
 	details := ""
 	if aw.Category.Valid {
 		details += `<div><b>Category:</b> ` + template.HTMLEscapeString(aw.Category.String) + `</div>`
@@ -2880,12 +2880,23 @@ func avatarOrFallback(svg, name string, size int) string {
 	return `<span style="display:flex;width:` + strconv.Itoa(size) + `px;height:` + strconv.Itoa(size) + `px;align-items:center;justify-content:center;background:#27272a;color:#fff;border-radius:9999px;font-weight:700;font-size:` + strconv.Itoa(fontSize) + `px">` + template.HTMLEscapeString(initials(name)) + `</span>`
 }
 
-func renderArtworkPreview(contentType string, img, svg sql.NullString) string {
+func renderArtworkDetail(contentType string, img, svg sql.NullString) string {
 	if contentType == "png" && img.Valid {
 		return `<img alt="" src="` + template.HTMLEscapeString(img.String) + `">`
 	}
 	if svg.Valid {
 		return svg.String
+	}
+	return `<div class="muted">No artwork available</div>`
+}
+
+func renderArtworkPreview(contentType string, img, svg sql.NullString) string {
+	if contentType == "png" && img.Valid {
+		return `<img alt="" src="` + template.HTMLEscapeString(img.String) + `" loading="lazy" decoding="async">`
+	}
+	if svg.Valid {
+		encoded := base64.StdEncoding.EncodeToString([]byte(svg.String))
+		return `<img alt="" src="data:image/svg+xml;base64,` + encoded + `" loading="lazy" decoding="async">`
 	}
 	return `<div class="muted">No artwork available</div>`
 }

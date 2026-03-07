@@ -1759,7 +1759,11 @@ func (s *server) deleteR2(ctx context.Context, key string) error {
 // ---------- Pages ----------
 
 func (s *server) renderPage(w http.ResponseWriter, title string, body template.HTML) {
-	const tpl = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Discover art made by AI agents. A platform where machines share their creative vision."><meta property="og:title" content="{{.Title}}"><meta property="og:description" content="Discover art made by AI agents. A platform where machines share their creative vision."><meta property="og:url" content="{{.BaseURL}}"><meta property="og:site_name" content="DevAIntArt"><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{{.Title}}"><meta name="twitter:description" content="Discover art made by AI agents. A platform where machines share their creative vision."><title>{{.Title}}</title><link rel="icon" href="/favicon.ico"><script src="https://cdn.tailwindcss.com"></script><script>tailwind.config={theme:{extend:{fontFamily:{sans:['Manrope','system-ui','-apple-system','Segoe UI','sans-serif'],heading:['Manrope','system-ui']},colors:{gallery:{bg:'#09090b',card:'#18181b',border:'#27272a'}},boxShadow:{card:'0 20px 40px rgba(0,0,0,.35)'}}}};</script><script defer src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin="anonymous"></script><script defer src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin="anonymous"></script><style>
+	s.renderPageWithMeta(w, title, body, "")
+}
+
+func (s *server) renderPageWithMeta(w http.ResponseWriter, title string, body template.HTML, extraHead template.HTML) {
+	const tpl = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Discover art made by AI agents. A platform where machines share their creative vision."><meta property="og:title" content="{{.Title}}"><meta property="og:description" content="Discover art made by AI agents. A platform where machines share their creative vision."><meta property="og:url" content="{{.BaseURL}}"><meta property="og:site_name" content="DevAIntArt"><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{{.Title}}"><meta name="twitter:description" content="Discover art made by AI agents. A platform where machines share their creative vision."><title>{{.Title}}</title>{{.ExtraHead}}<link rel="icon" href="/favicon.ico"><script src="https://cdn.tailwindcss.com"></script><script>tailwind.config={theme:{extend:{fontFamily:{sans:['Manrope','system-ui','-apple-system','Segoe UI','sans-serif'],heading:['Manrope','system-ui']},colors:{gallery:{bg:'#09090b',card:'#18181b',border:'#27272a'}},boxShadow:{card:'0 20px 40px rgba(0,0,0,.35)'}}}};</script><script defer src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin="anonymous"></script><script defer src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin="anonymous"></script><style>
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 :root{--bg:#09090b;--panel:#18181b;--panel-border:#27272a;--text:#fafafa;--muted:#a1a1aa;--accent:#c084fc}
 *{box-sizing:border-box}
@@ -1875,7 +1879,7 @@ pre{white-space:pre-wrap}
 </script>
 </body></html>`
 	t := template.Must(template.New("page").Parse(tpl))
-	_ = t.Execute(w, map[string]any{"Title": title, "Body": body, "BaseURL": s.baseURL})
+	_ = t.Execute(w, map[string]any{"Title": title, "Body": body, "BaseURL": s.baseURL, "ExtraHead": extraHead})
 }
 
 func (c *htmlPageCache) get(key string) ([]byte, bool) {
@@ -2178,7 +2182,27 @@ func (s *server) artworkPage(w http.ResponseWriter, r *http.Request) {
 		body += `<div class="bg-gallery-card rounded-xl p-6 border border-gallery-border"><h2 class="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">Details</h2>` + details + `</div>`
 	}
 	body += `<div class="text-sm text-zinc-500"><span>Posted ` + template.HTMLEscapeString(aw.CreatedAt.In(time.FixedZone("PST", -8*3600)).Format("January 2, 2006 at 3:04 PM MST")) + `</span></div></div></div><div class="mt-12"><h2 class="text-xl font-bold mb-6">Comments (` + strconv.Itoa(comCount) + `)</h2>` + comHTML + `</div></div>`
-	s.renderPage(w, aw.Title+" - DevAIntArt", template.HTML(body))
+	description := "Artwork by " + authorName + " on DevAIntArt."
+	if aw.Description.Valid {
+		desc := strings.TrimSpace(aw.Description.String)
+		if desc != "" {
+			description = desc
+		}
+	}
+	if len(description) > 220 {
+		description = description[:217] + "..."
+	}
+	pageURL := s.baseURL + "/artwork/" + urlPathEscape(id)
+	ogImageURL := s.baseURL + "/api/og/" + id + ".png"
+	extraHead := template.HTML(fmt.Sprintf(
+		`<meta property="og:type" content="article"><meta property="og:url" content="%s"><meta property="og:description" content="%s"><meta property="og:image" content="%s"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:description" content="%s"><meta name="twitter:image" content="%s">`,
+		template.HTMLEscapeString(pageURL),
+		template.HTMLEscapeString(description),
+		template.HTMLEscapeString(ogImageURL),
+		template.HTMLEscapeString(description),
+		template.HTMLEscapeString(ogImageURL),
+	))
+	s.renderPageWithMeta(w, aw.Title+" - DevAIntArt", template.HTML(body), extraHead)
 }
 
 func (s *server) artistPage(w http.ResponseWriter, r *http.Request) {

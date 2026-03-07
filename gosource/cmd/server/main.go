@@ -2054,7 +2054,7 @@ func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
 	nav := `<div class="flex gap-4 mb-8" style="border-bottom:1px solid var(--panel-border)"><a href="/" class="pb-3" style="border-bottom:2px solid ` + ternary(sortBy != "popular", "#a855f7", "transparent") + `;color:` + ternary(sortBy != "popular", "#fff", "#a1a1aa") + `">Recent</a><a href="/?sort=popular" class="pb-3" style="border-bottom:2px solid ` + ternary(sortBy == "popular", "#a855f7", "transparent") + `;color:` + ternary(sortBy == "popular", "#fff", "#a1a1aa") + `">Popular</a></div>`
 	recentChatter := []string{}
 	for _, item := range s.collectFeed(ctx) {
-		if len(recentChatter) >= 8 {
+		if len(recentChatter) >= 20 {
 			break
 		}
 		icon := "•"

@@ -2238,8 +2238,7 @@ func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
 		if rows.Scan(&id, &title, &svg, &img, &contentType, &views, &agentViews, &tags, &artist, &display, &avatar, &createdAt, &favCount, &comCount) != nil {
 			continue
 		}
-		preview := renderArtworkPreview(contentType, img, svg)
-		cards = append(cards, renderProdArtworkCard(id, title, artist, display, avatar, preview, views, favCount, comCount, agentViews, createdAt))
+		cards = append(cards, renderProdArtworkCard(id, title, artist, display, avatar, contentType, img, svg, views, favCount, comCount, agentViews, createdAt))
 	}
 	if len(cards) == 0 {
 		s.renderAndCachePage(w, cacheKey, homePageTTL, "DevAIntArt", template.HTML(`<h1>AI Art Gallery</h1><p class="muted">No artwork yet.</p>`))
@@ -2472,8 +2471,7 @@ func (s *server) artistPage(w http.ResponseWriter, r *http.Request) {
 				count++
 				totalViews += views
 				totalFav += fav
-				preview := renderArtworkPreview(contentType, img, svg)
-				cards = append(cards, renderProdArtworkCard(awID, title, name, display, avatar, preview, views, fav, com, 0, createdAt))
+				cards = append(cards, renderProdArtworkCard(awID, title, name, display, avatar, contentType, img, svg, views, fav, com, 0, createdAt))
 			}
 		}
 	}
@@ -2636,8 +2634,7 @@ func (s *server) tagPage(w http.ResponseWriter, r *http.Request) {
 		if rows.Scan(&id, &title, &svg, &img, &contentType, &views, &agentViews, &createdAt, &artist, &display, &avatar, &fav, &com) != nil {
 			continue
 		}
-		preview := renderArtworkPreview(contentType, img, svg)
-		cards = append(cards, renderProdArtworkCard(id, title, artist, display, avatar, preview, views, fav, com, agentViews, createdAt))
+		cards = append(cards, renderProdArtworkCard(id, title, artist, display, avatar, contentType, img, svg, views, fav, com, agentViews, createdAt))
 	}
 	hasMore := len(cards) > limit
 	if hasMore {
@@ -2899,7 +2896,8 @@ func svgDataURL(svg string) string {
 	return "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString([]byte(svg))
 }
 
-func renderProdArtworkCard(id, title, artistName, artistDisplay, artistAvatar, preview string, views, favCount, comCount, agentViews int, createdAt time.Time) string {
+func renderProdArtworkCard(id, title, artistName, artistDisplay, artistAvatar, contentType string, img, svg sql.NullString, views, favCount, comCount, agentViews int, createdAt time.Time) string {
+	preview := renderArtworkPreview(contentType, img, svg)
 	timeHTML := ``
 	if !createdAt.IsZero() {
 		ts := createdAt.UTC().Format(time.RFC3339Nano)

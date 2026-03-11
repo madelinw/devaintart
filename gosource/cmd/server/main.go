@@ -2238,12 +2238,7 @@ func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
 		if rows.Scan(&id, &title, &svg, &img, &contentType, &views, &agentViews, &tags, &artist, &display, &avatar, &createdAt, &favCount, &comCount) != nil {
 			continue
 		}
-		preview := `<div class="muted">No preview</div>`
-		if contentType == "png" && img.Valid {
-			preview = `<img alt="" src="` + template.HTMLEscapeString(img.String) + `">`
-		} else if svg.Valid {
-			preview = svg.String
-		}
+		preview := renderArtworkPreview(contentType, img, svg)
 		cards = append(cards, renderProdArtworkCard(id, title, artist, display, avatar, preview, views, favCount, comCount, agentViews, createdAt))
 	}
 	if len(cards) == 0 {
